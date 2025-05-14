@@ -1,132 +1,483 @@
 "use client"
 import { Button } from "@/components/ui/button"
-import { Eraser, PaintBucket, Trash } from "lucide-react"
-import React from "react"
+import {
+  Eraser,
+  PaintBucket,
+  Trash,
+  RotateCcw,
+  Circle,
+  Square,
+  Triangle,
+  Star,
+  ArrowRight,
+  Send,
+  Clock,
+  HelpCircle,
+  SkipForward,
+} from "lucide-react"
+import type React from "react"
+import { useState, useEffect } from "react"
 import { headerLayout as HeaderLayout } from "@/app/layout"
 import { backgroundLayout as BackgroundLayout } from "@/app/layout"
 import { footerLayout as FooterLayout } from "@/app/layout"
-import blackUserMemberGuestIcon from "@/../public/black-user-member-guest-icon-701751695037011q8iwf4mjbn.png"
-import { RotateCcw, Circle, Square, Triangle, Star } from "lucide-react"
-
-export function playerPlate(playerName: string, playerScore: number) {
-  return (
-    <div className={`playerPlate ${playerName} w-full h-16 bg-white dark:bg-black/30 rounded-xl flex mt-2 items-center justify-between p-4 border-1 border-1`}>
-      <div className="flex items-center space-x-2">
-        <div className="w-8 h-8 bg-blue-500 rounded-full">
-          <img src={blackUserMemberGuestIcon.src} alt={`${playerName}`} className="w-full h-full rounded-full" />
-        </div>
-        <span className="text-md font-200">{playerName}</span>
-      </div>
-      <span className="text-lg font-200 text-zinc-400">{playerScore}</span>
-    </div>
-  )
-}
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
 
 export default function RoomPage() {
-  // Generate random bubble styles
-  const [brushWeight, setBrushWeight] = React.useState(10)
+  // State management
+  const [brushWeight, setBrushWeight] = useState(10)
+  const [brushColor, setBrushColor] = useState("#4F46E5")
+  const [chatMessages, setChatMessages] = useState<{ playerName: string; message: string; isCurrentUser: boolean }[]>([
+    { playerName: "System", message: "Welcome to Draw & Guess! The game will start soon.", isCurrentUser: false },
+    { playerName: "Player 2", message: "Hello everyone!", isCurrentUser: false },
+    { playerName: "Player 3", message: "I'm ready to play!", isCurrentUser: false },
+  ])
+  const [currentWord, setCurrentWord] = useState("butterfly")
+  const [timeLeft, setTimeLeft] = useState(60)
+  const [currentDrawer, setCurrentDrawer] = useState("Player 1")
+  const [players, setPlayers] = useState([
+    { name: "Player 1", score: 120, isDrawing: true },
+    { name: "Player 2", score: 85, isDrawing: false },
+    { name: "Player 3", score: 65, isDrawing: false },
+    { name: "You", score: 40, isDrawing: false },
+    { name: "Player 5", score: 30, isDrawing: false },
+  ])
 
-  const weightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value, 10)
+  
+
+  // Colors palette
+  const colors = [
+    "#000000",
+    "#FFFFFF",
+    "#FF0000",
+    "#00FF00",
+    "#0000FF",
+    "#FFFF00",
+    "#FF00FF",
+    "#00FFFF",
+    "#FFA500",
+    "#800080",
+    "#4F46E5",
+    "#EC4899",
+    "#10B981",
+    "#F59E0B",
+    "#6B7280",
+  ]
+
+  // Timer effect
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Event handlers
+  const handleBrushWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Number.parseInt(e.target.value, 10)
     setBrushWeight(value)
-    console.log("Brush weight changed to:", brushWeight)
+  }
 
+  const handleColorChange = (color: string) => {
+    setBrushColor(color)
+  }
+
+  const handleSendChat = () => {
+    const chatInput = document.getElementById("chatInput") as HTMLInputElement
+    const message = chatInput.value.trim()
+    if (message) {
+      setChatMessages([...chatMessages, { playerName: "You", message, isCurrentUser: true }])
+      chatInput.value = ""
+
+      // Simulate response for demo purposes
+      if (message.toLowerCase().includes(currentWord.toLowerCase())) {
+        setTimeout(() => {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              playerName: "System",
+              message: "You guessed correctly! The word was '" + currentWord + "'",
+              isCurrentUser: false,
+            },
+          ])
+        }, 500)
+      } else {
+        setTimeout(() => {
+          const responses = [
+            { playerName: "Player 2", message: "Good guess, but not quite!", isCurrentUser: false },
+            { playerName: "Player 3", message: "I think it's something else...", isCurrentUser: false },
+            { playerName: "Player 5", message: "Hmm, let me think...", isCurrentUser: false },
+          ]
+          const randomResponse = responses[Math.floor(Math.random() * responses.length)]
+          setChatMessages((prev) => [...prev, randomResponse])
+        }, 1500)
+      }
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleSendChat()
+    }
+  }
+
+  // Player component
+  const PlayerItem = ({ player }: { player: { name: string; score: number; isDrawing: boolean } }) => (
+    <div
+      className={`w-full py-3 px-4 bg-white/80 dark:bg-zinc-800/80 rounded-lg flex items-center justify-between mb-2 transition-all ${player.isDrawing ? "border-l-4 border-indigo-500" : ""}`}
+    >
+      <div className="flex items-center space-x-3">
+        <div
+          className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium ${player.isDrawing ? "bg-indigo-500" : "bg-gray-500"}`}
+        >
+          {player.name.charAt(0)}
+        </div>
+        <div className="flex flex-col">
+          <span className="font-medium text-zinc-800 dark:text-zinc-200">{player.name}</span>
+          {player.isDrawing && (
+            <Badge
+              variant="outline"
+              className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 text-xs"
+            >
+              Drawing now
+            </Badge>
+          )}
+        </div>
+      </div>
+      <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{player.score}</span>
+    </div>
+  )
+
+  // Chat message component
+  const ChatMessage = ({ message }: { message: { playerName: string; message: string; isCurrentUser: boolean } }) => {
+    const isSystem = message.playerName === "System"
+
+    return (
+      <div
+        className={`mb-3 p-3 rounded-lg ${
+          isSystem
+            ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200"
+            : message.isCurrentUser
+              ? "bg-blue-100 dark:bg-blue-900/30 ml-4"
+              : "bg-gray-100 dark:bg-zinc-800/80 mr-4"
+        }`}
+      >
+        <div className="flex items-center mb-1">
+          <span className={`font-medium text-sm ${isSystem ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
+            {message.playerName}
+          </span>
+        </div>
+        <p className="text-zinc-700 dark:text-zinc-300">{message.message}</p>
+      </div>
+    )
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden">
+    <div className="relative flex min-h-screen flex-col overflow-hidden ml-auto mr-auto">
       {/* Dynamic Background */}
-        <BackgroundLayout />
+      <BackgroundLayout />
 
-        <HeaderLayout />
+      {/* <HeaderLayout /> */}
 
-        {/* Main content */}
-        <main className="main-content container z-10 flex flex-1 flex-col md:flex-row items-center justify-center ml-auto mr-auto gap-4">
-            {/* divide into three parts: players, drawing area and chat */}
-            <div className="flex flex-col items-center space-y-2 w-full md:w-1/4">
-                <div className="player-list h-192 w-full overflow-y-auto bg-white dark:bg-black/30 p-4 rounded-xl">
-                <h2 className="text-lg font-300 align-center text-zinc-600">Players</h2>
-                <div className="flex flex-col items-center">
-                    {playerPlate("Player 1", 10)}
-                    {playerPlate("Player 2", 20)}
-                    {playerPlate("Player 3", 30)}
-                    {playerPlate("Player 4", 40)}
-                    {playerPlate("Player 5", 50)}
-                </div>
-                <div className="findingPlayer flex flex-col items-center mt-2">
-                    <span className="text-lg font-200">Searching for players...</span>
-                </div>
-                </div>
+      {/* Game status bar */}
+      <div className="container z-10 mt-4 mb-2 ml-auto mr-auto">
+        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm rounded-xl p-3 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="bg-indigo-100 dark:bg-indigo-900/50 p-2 rounded-lg">
+              <Clock className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <div className="flex flex-col items-center space-y-2 w-full md:w-2/4">
-                <div className="drawing-area h-192 w-full bg-white/50 dark:bg-black/30 p-4 rounded-xl">
-                {/* Drawing area content */}
-                    <div className="canva w-full h-[70%] bg-[#ffffff] border-1 rounded-sm border-zinc-200"></div>
-                    <div className="toolbox w-full h-[30%] p-2 flex flex-col mt-2">
-                        <div className="tools w-full h-[50%] flex gap-3">
-                            <div className="currentColor w-[100px] h-full bg-blue-500 border-7 border-white rounded-md"></div>
-                            <div className="brush-width w-[50%] bg-white flex items-center p-4">
-                                <label htmlFor="brushWeight" className="mr-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                    Brush Weight:
-                                </label>
-                                <input
-                                    id="brushWeight"
-                                    type="range"
-                                    min="1"
-                                    max="50"
-                                    defaultValue="10"
-                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-                                    value={brushWeight}
-                                    onChange={(e) => weightChange(e)} // Replace with your logic
-                                />
-                                <label htmlFor="tooltip" className="brushtooltip ml-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                    {brushWeight}px
-                                </label>
-                            </div>
-                            <div className="other-tools h-full grid grid-cols-4 gap-3">
-                                {/* Top Row */}
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <Eraser className="w-6 h-6 text-black" />
-                                </div>
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <PaintBucket className="w-6 h-6 text-black" />
-                                </div>
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <RotateCcw className="w-6 h-6 text-black" />
-                                </div>
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <Trash className="w-6 h-6 text-black" />
-                                </div>
-
-                                {/* Bottom Row */}
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <Circle className="w-6 h-6 text-black" />
-                                </div>
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <Square className="w-6 h-6 text-black" />
-                                </div>
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <Triangle className="w-6 h-6 text-black" />
-                                </div>
-                                <div className="tool w-[50px] h-[50px] bg-white rounded-md border-1 border-zinc-200 flex items-center justify-center hover:cursor-pointer hover:bg-gray-100">
-                                    <Star className="w-6 h-6 text-black" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div>
+              <div className="text-sm text-zinc-500 dark:text-zinc-400">Time left</div>
+              <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{timeLeft}s</div>
             </div>
-            <div className="flex flex-col items-center space-y-2 w-full md:w-1/4">
-                <div className="chat-area h-192 w-full overflow-y-auto bg-white dark:bg-black/30 p-4 rounded-xl">
-                {/* Chat area content */}
-                </div>
+          </div>
+
+          <div className="flex flex-col items-center">
+            <div className="text-sm text-zinc-500 dark:text-zinc-400">Current drawer</div>
+            <div className="text-xl font-bold">{currentDrawer}</div>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div>
+              <div className="text-sm text-zinc-500 dark:text-zinc-400">Current word</div>
+              <div className="text-xl font-bold tracking-wider">
+                {players.find((p) => p.name === "You")?.isDrawing
+                  ? currentWord
+                  : currentWord
+                      .split("")
+                      .map((char) => "_")
+                      .join(" ")}
+              </div>
             </div>
-        </main>
+            <div className="bg-indigo-100 dark:bg-indigo-900/50 p-2 rounded-lg">
+              <HelpCircle className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <FooterLayout />
+      {/* Main content */}
+      <main className="container z-10 flex flex-1 flex-col md:flex-row gap-4 mb-6 ml-auto mr-auto">
+        {/* Players section */}
+        <div className="w-full md:w-1/4 flex flex-col">
+          <div className="bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm rounded-xl p-4 h-full">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200">Players</h2>
+              <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                Round 2/5
+              </Badge>
+            </div>
 
-        {/* Animation for floating bubbles */}
-        <style jsx global>{`
+            <div className="space-y-1">
+              {players.map((player, index) => (
+                <PlayerItem key={index} player={player} />
+              ))}
+            </div>
+
+            <Separator className="my-4" />
+
+            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">Waiting for more players...</div>
+          </div>
+        </div>
+
+        {/* Drawing area */}
+        <div className="w-full md:w-2/4 flex flex-col">
+          <div className="bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm rounded-xl p-4 h-full">
+            {/* Canvas */}
+            <div className="w-full aspect-video bg-white rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-md mb-4"></div>
+
+            {/* Tools */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Color palette */}
+              <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg">
+                <div className="text-sm font-medium mb-2 text-zinc-600 dark:text-zinc-400">Colors</div>
+                <div className="grid grid-cols-5 gap-2">
+                  {colors.map((color, index) => (
+                    <TooltipProvider key={index}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            className={`w-8 h-8 rounded-md transition-transform border-1 ${brushColor === color ? "ring-2 ring-offset-2 ring-indigo-500 scale-110" : ""}`}
+                            style={{ backgroundColor: color }}
+                            onClick={() => handleColorChange(color)}
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{color}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ))}
+                </div>
+              </div>
+
+              {/* Brush settings */}
+              <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg">
+                <div className="text-sm font-medium mb-2 text-zinc-600 dark:text-zinc-400">
+                  Brush Size: {brushWeight}px
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={brushWeight}
+                  onChange={handleBrushWeightChange}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                />
+                <div className="line-simulate w-full h-[70%] flex items-center justify-between mt-2 align-middle">
+                  <div
+                    className="w-full h-2 bg-gray-300 rounded-lg items-center justify-center align-middle"
+                    style={{                      
+                      backgroundColor: brushColor,
+                      transition: "width 0.3s ease",
+                      height: `${brushWeight}px`,
+                      border: '1px solid #ccc', 
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Tools */}
+              <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg">
+                <div className="text-sm font-medium mb-2 text-zinc-600 dark:text-zinc-400">Tools</div>
+                <div className="grid grid-cols-4 gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <Eraser className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Eraser</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <PaintBucket className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Fill</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <RotateCcw className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Undo</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <Trash className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Clear All</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+
+              {/* Shapes */}
+              <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg">
+                <div className="text-sm font-medium mb-2 text-zinc-600 dark:text-zinc-400">Shapes</div>
+                <div className="grid grid-cols-4 gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <Circle className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Circle</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <Square className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Square</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <Triangle className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Triangle</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors">
+                          <Star className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Star</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <Button
+                variant="outline"
+                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border-indigo-300 dark:bg-indigo-900/30 dark:hover:bg-indigo-800/50 dark:text-indigo-300 dark:border-indigo-700"
+              >
+                <HelpCircle className="w-4 h-4 mr-2" />
+                Show Hint
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:hover:bg-amber-800/50 dark:text-amber-300 dark:border-amber-700"
+              >
+                <ArrowRight className="w-4 h-4 mr-2" />
+                New Word
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-rose-300 dark:bg-rose-900/30 dark:hover:bg-rose-800/50 dark:text-rose-300 dark:border-rose-700"
+              >
+                <SkipForward className="w-4 h-4 mr-2" />
+                Skip Turn
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat area */}
+        <div className="w-full md:w-1/4 flex flex-col overflow-y-auto">
+          <div className="bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm rounded-xl p-4 h-full flex flex-col">
+            <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 mb-4">Chat</h2>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto mb-4 pr-2 space-y-1">
+              {chatMessages.map((msg, index) => (
+                <ChatMessage key={index} message={msg} />
+              ))}
+            </div>
+
+            {/* Input */}
+            <div className="relative">
+              <input
+                id="chatInput"
+                type="text"
+                placeholder="Type your guess..."
+                className="w-full p-3 pr-12 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white/90 dark:bg-zinc-800/90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                onKeyDown={handleKeyDown}
+              />
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md text-indigo-600 hover:bg-indigo-100 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+                onClick={handleSendChat}
+              >
+                <Send className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <FooterLayout />
+
+      {/* Animation for floating bubbles */}
+      <style jsx global>{`
         @keyframes float {
           0% {
             transform: translate(0, 0) scale(1);
