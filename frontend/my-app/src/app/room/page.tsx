@@ -24,6 +24,34 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 
+function PopUpSetName({
+  name,
+  setName,
+  onSubmit,
+}: {
+  name: string
+  setName: (name: string) => void
+  onSubmit: () => void
+}) {
+  return (
+    <div className="fixed z-50 top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+      <div className="bg-white dark:bg-zinc-800 rounded-lg p-6 shadow-lg">
+        <h2 className="text-lg font-bold mb-4">Set Your Name</h2>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter your name"
+          className="w-full p-3 border border-zinc-300 dark:border-zinc-700 rounded-lg mb-4"
+        />
+        <Button onClick={onSubmit} className="w-full">
+          Submit
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function RoomPage() {
   // State management
   const [brushWeight, setBrushWeight] = useState(10)
@@ -36,15 +64,16 @@ export default function RoomPage() {
   const [currentWord, setCurrentWord] = useState("butterfly")
   const [timeLeft, setTimeLeft] = useState(60)
   const [currentDrawer, setCurrentDrawer] = useState("Player 1")
+  const [myname, setmyname] = useState("Guest")
+  const [showNamePopup, setShowNamePopup] = useState(true)
   const [players, setPlayers] = useState([
     { name: "Player 1", score: 120, isDrawing: true },
     { name: "Player 2", score: 85, isDrawing: false },
     { name: "Player 3", score: 65, isDrawing: false },
-    { name: "You", score: 40, isDrawing: false },
+    { name: myname, score: 40, isDrawing: false },
     { name: "Player 5", score: 30, isDrawing: false },
   ])
 
-  
 
   // Colors palette
   const colors = [
@@ -71,6 +100,8 @@ export default function RoomPage() {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0))
     }, 1000)
     return () => clearInterval(timer)
+
+    //set up your name
   }, [])
 
   // Event handlers
@@ -120,6 +151,11 @@ export default function RoomPage() {
     if (e.key === "Enter") {
       handleSendChat()
     }
+  }
+
+  
+  const Draw = (e: React.MouseEvent<HTMLDivElement>) => {
+      
   }
 
   // Player component
@@ -175,6 +211,18 @@ export default function RoomPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden ml-auto mr-auto">
+
+      {showNamePopup && <PopUpSetName
+        name={myname}
+        setName={setmyname}
+        onSubmit={() => {
+          if (myname.trim()) {
+            localStorage.setItem("playerName", myname)
+            setShowNamePopup(false) // 關閉彈窗
+            alert(`Your name is set to ${myname}`)
+          }
+        }}
+      />}
       {/* Dynamic Background */}
       <BackgroundLayout />
 
@@ -245,7 +293,7 @@ export default function RoomPage() {
         <div className="w-full md:w-2/4 flex flex-col">
           <div className="bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm rounded-xl p-4 h-full">
             {/* Canvas */}
-            <div className="w-full aspect-video bg-white rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-md mb-4"></div>
+            <div className="w-full aspect-video bg-white rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-md mb-4" onClick={(e) => Draw(e)}></div>
 
             {/* Tools */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -419,21 +467,21 @@ export default function RoomPage() {
             <div className="grid grid-cols-3 gap-3 mt-4">
               <Button
                 variant="outline"
-                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border-indigo-300 dark:bg-indigo-900/30 dark:hover:bg-indigo-800/50 dark:text-indigo-300 dark:border-indigo-700"
+                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border-indigo-300 hover:cursor-pointer dark:bg-indigo-900/30 dark:hover:bg-indigo-800/50 dark:text-indigo-300 dark:border-indigo-700"
               >
                 <HelpCircle className="w-4 h-4 mr-2" />
                 Show Hint
               </Button>
               <Button
                 variant="outline"
-                className="bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:hover:bg-amber-800/50 dark:text-amber-300 dark:border-amber-700"
+                className="bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300 hover:cursor-pointer dark:bg-amber-900/30 dark:hover:bg-amber-800/50 dark:text-amber-300 dark:border-amber-700"
               >
                 <ArrowRight className="w-4 h-4 mr-2" />
                 New Word
               </Button>
               <Button
                 variant="outline"
-                className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-rose-300 dark:bg-rose-900/30 dark:hover:bg-rose-800/50 dark:text-rose-300 dark:border-rose-700"
+                className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-rose-300 hover:cursor-pointer dark:bg-rose-900/30 dark:hover:bg-rose-800/50 dark:text-rose-300 dark:border-rose-700"
               >
                 <SkipForward className="w-4 h-4 mr-2" />
                 Skip Turn
