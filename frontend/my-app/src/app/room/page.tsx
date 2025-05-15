@@ -23,6 +23,7 @@ import { footerLayout as FooterLayout } from "@/app/layout"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Fascinate } from "next/font/google"
 
 function PopUpSetName({
   name,
@@ -41,10 +42,12 @@ function PopUpSetName({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          id="nameInput"
           placeholder="Enter your name"
-          className="w-full p-3 border border-zinc-300 dark:border-zinc-700 rounded-lg mb-4"
+          className="w-full p-3 border border-zinc-300 dark:border-zinc-700 rounded-lg"
         />
-        <Button onClick={onSubmit} className="w-full hover:scale-105 transition-transform duration-200 hover:cursor-pointer">
+        <label id="nameInputWarning" className="nameInputWarning text-sm text-red-700 dark:text-red-400 mb-4 hidden">This name is taken, try another one.</label>
+        <Button onClick={onSubmit} className="w-full hover:scale-105 transition-transform duration-200 hover:cursor-pointer mt-4">
           Submit
         </Button>
       </div>
@@ -54,7 +57,7 @@ function PopUpSetName({
 
 export default function RoomPage() {
   // State management
-  const [brushWeight, setBrushWeight] = useState(10)
+  const [brushWeight, setBrushWeight] = useState(4)
   const [brushColor, setBrushColor] = useState("#4F46E5")
   const [chatMessages, setChatMessages] = useState<{ playerName: string; message: string; isCurrentUser: boolean }[]>([
     { playerName: "System", message: "Welcome to Draw & Guess! The game will start soon.", isCurrentUser: false },
@@ -73,9 +76,14 @@ export default function RoomPage() {
     { name: "Player 4", score: 30, isDrawing: false },
   ])
   const [isDrawing, setDrawing] = useState(false)
+  const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null)
   const [lastDrawPos, setLastDrawPos] = useState<{x: number, y: number} | null>(null)
   const [eraserActive, setEraserActive] = useState(false)
   const [fillActive, setFillActive] = useState(false)
+  const [drawCircle, setDrawCircle] = useState(false)
+  const [drawSquare, setDrawSquare] = useState(false)
+  const [drawTriangle, setDrawTriangle] = useState(false)
+  const [drawStar, setDrawStar] = useState(false)
 
   const previousCanvasRef = useRef<HTMLCanvasElement | null>(null) //for redo
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -223,6 +231,9 @@ export default function RoomPage() {
 
 // 修改你的事件處理函數
   const OtherEvents = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
+    if (!amIDrawing) return // If not the current player
+
     const canvas = canvasRef.current;
     if (!canvas) return; // If canvas is not ready
 
@@ -243,75 +254,137 @@ export default function RoomPage() {
       setFillActive(false); // Disable fill after use
     }
 
-    ctx.strokeStyle = brushColor
-    ctx.lineWidth = brushWeight
-    ctx.lineCap = "round"
-    ctx.lineJoin = "round"
-    ctx.beginPath()
-    ctx.lineTo(x, y)
-    ctx.stroke()
+    // ctx.strokeStyle = brushColor
+    // ctx.lineWidth = brushWeight
+    // ctx.lineCap = "round"
+    // ctx.lineJoin = "round"
+    // ctx.beginPath()
+    // ctx.lineTo(x, y)
+    // ctx.stroke()
 
     setLastDrawPos(null) // Save the last position
   };
 
   
   const Draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
-      if (!isDrawing || !amIDrawing) return //if not drawing or not the current player
+    const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
+    if (!isDrawing || !amIDrawing) return
 
-      if (fillActive) {
-        setFillActive(false) // Disable fill when drawing
-        return
-      }
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
 
-      const canvas =  canvasRef.current
-      if (!canvas) return //if canvas is not ready
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const x = (e.clientX - rect.left) * scaleX
+    const y = (e.clientY - rect.top) * scaleY
 
-      const ctx = canvas.getContext("2d")
-      if (!ctx) return //if context is not ready
+    if (drawCircle && startPos) {
+      // 預覽用：清空畫布後重畫背景（這邊簡化處理）
+      Redo() // ← 使用你已有的函數還原背景
+      const dx = x - startPos.x
+      const dy = y - startPos.y
+      const radius = Math.sqrt(dx * dx + dy * dy)
 
-      const rect = canvas.getBoundingClientRect()
-      const scaleX = canvas.width / rect.width
-      const scaleY = canvas.height / rect.height
-      const x = (e.clientX - rect.left) * scaleX
-      const y = (e.clientY - rect.top) * scaleY
-
-
-      if (eraserActive) {
-        // Eraser mode
-        ctx.strokeStyle = "#FFFFFF" // Eraser color
-        ctx.lineCap = "round"
-        ctx.lineJoin = "round"
-        ctx.lineWidth = brushWeight * 2 // Eraser size
-
-        ctx.beginPath()
-        if (lastDrawPos) {
-          ctx.moveTo(lastDrawPos.x, lastDrawPos.y)
-        }
-        else {
-          ctx.moveTo(x, y)
-        }
-        ctx.lineTo(x, y)
-        ctx.stroke()
-        setLastDrawPos({ x, y }) // Save the last position
-        return
-      }
-      
+      ctx.beginPath()
+      ctx.arc(startPos.x, startPos.y, radius, 0, Math.PI * 2)
       ctx.strokeStyle = brushColor
       ctx.lineWidth = brushWeight
+      ctx.stroke()
+      ctx.closePath()
+      return
+    }
+
+    if (drawSquare && startPos) {
+      Redo() // ← 使用你已有的函數還原背景
+      const dx = x - startPos.x
+      const dy = y - startPos.y
+      ctx.beginPath()
+      ctx.rect(startPos.x, startPos.y, dx, dy)
+      ctx.strokeStyle = brushColor
+      ctx.lineWidth = brushWeight
+      ctx.stroke()
+      ctx.closePath()
+      return
+    }
+
+    if (drawTriangle && startPos) {
+      Redo() // ← 使用你已有的函數還原背景
+      ctx.beginPath()
+      ctx.moveTo(startPos.x, startPos.y)
+      ctx.lineTo(x, y)
+      ctx.lineTo(startPos.x + (x - startPos.x) / 2, startPos.y - Math.abs(x - startPos.x))
+      ctx.closePath()
+      ctx.strokeStyle = brushColor
+      ctx.lineWidth = brushWeight
+      ctx.stroke()
+      return
+    }
+
+    if (drawStar && startPos) {
+      Redo()
+
+      const centerX = startPos.x
+      const centerY = startPos.y
+
+      const dx = x - centerX
+      const dy = y - centerY
+      const outerRadius = Math.sqrt(dx * dx + dy * dy)
+      const innerRadius = outerRadius / 2.5
+      const spikes = 5
+
+      ctx.beginPath()
+
+      for (let i = 0; i < spikes * 2; i++) {
+        const angle = (Math.PI / spikes) * i
+        const radius = i % 2 === 0 ? outerRadius : innerRadius
+        const px = centerX + radius * Math.cos(angle - Math.PI / 2)
+        const py = centerY + radius * Math.sin(angle - Math.PI / 2)
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+
+      ctx.closePath()
+      ctx.strokeStyle = brushColor
+      ctx.lineWidth = brushWeight
+      ctx.stroke()
+      return
+    }
+
+    // 原本畫筆或橡皮擦等邏輯保留
+    if (eraserActive) {
+      ctx.strokeStyle = "#FFFFFF"
       ctx.lineCap = "round"
       ctx.lineJoin = "round"
+      ctx.lineWidth = brushWeight * 2
       ctx.beginPath()
       if (lastDrawPos) {
         ctx.moveTo(lastDrawPos.x, lastDrawPos.y)
-      }
-      else {
+      } else {
         ctx.moveTo(x, y)
       }
       ctx.lineTo(x, y)
       ctx.stroke()
+      setLastDrawPos({ x, y })
+      return
+    }
 
-      setLastDrawPos({ x, y }) // Save the last position
+    // 一般畫筆模式
+    ctx.strokeStyle = brushColor
+    ctx.lineWidth = brushWeight
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+    ctx.beginPath()
+    if (lastDrawPos) {
+      ctx.moveTo(lastDrawPos.x, lastDrawPos.y)
+    } else {
+      ctx.moveTo(x, y)
+    }
+    ctx.lineTo(x, y)
+    ctx.stroke()
+    setLastDrawPos({ x, y })
   }
 
   const clearCanvas = () => {
@@ -350,10 +423,15 @@ export default function RoomPage() {
   }
 
   const Redo = () => {
+    const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
+  
+    if (!amIDrawing) return //if not the current player
+
     const canvas = canvasRef.current
     if (!canvas) return //if canvas is not ready
     const ctx = canvas.getContext("2d")
     if (!ctx) return //if context is not ready
+
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -425,6 +503,16 @@ export default function RoomPage() {
         setName={setmyname}
         onSubmit={() => {
           if (myname.trim()) {
+
+            if (players.find((player) => player.name === myname)) {
+              const nameInput = document.getElementById("nameInput") as HTMLInputElement
+              const nameInputWarning = document.querySelector(".nameInputWarning") as HTMLLabelElement
+              nameInputWarning.classList.remove("hidden")
+              nameInputWarning.innerText = "This name is taken, try another one."
+              nameInput.classList.add("border-red-500 shaking")
+              return
+            }
+
             localStorage.setItem("playerName", myname)
             setShowNamePopup(false) // 關閉彈窗
             setPlayers((prev) => [
@@ -512,25 +600,164 @@ export default function RoomPage() {
               ref={previousCanvasRef}
               className="w-full aspect-video bg-white rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-md mb-4 hidden"></canvas>
             <canvas
-             ref={canvasRef}
-             onClick={OtherEvents}
-             onMouseDown={() => {
-              saveCanvas()
-              setDrawing(true)  
-            }}
-             onMouseLeave={() => {
-              setDrawing(false)
-              setLastDrawPos(null)
-            }}
-             onMouseUp={() => {
-              setDrawing(false)
-              setLastDrawPos(null)
-            }}
-             onMouseMove={Draw}
-             className="w-full aspect-video bg-white rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-md mb-4" ></canvas>
+              ref={canvasRef}
+              onMouseDown={(e) => {
+                saveCanvas()
+                setDrawing(true)
+
+                const canvas = canvasRef.current
+                if (!canvas) return
+                const rect = canvas.getBoundingClientRect()
+                const scaleX = canvas.width / rect.width
+                const scaleY = canvas.height / rect.height
+                const x = (e.clientX - rect.left) * scaleX
+                const y = (e.clientY - rect.top) * scaleY
+
+                if (drawCircle || drawSquare || drawTriangle || drawStar) {
+                  setStartPos({ x, y }) // 記錄起點
+                }
+              }}
+              onClick={OtherEvents}
+              onMouseMove={Draw}
+              onMouseUp={(e) => {
+                setDrawing(false)
+                setLastDrawPos(null)
+
+                const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
+                if (!amIDrawing) return //if not the current player
+
+                if (drawCircle && startPos) {
+                  const canvas = canvasRef.current
+                  if (!canvas) return
+                  const ctx = canvas.getContext("2d")
+                  if (!ctx) return
+
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+
+                  const dx = x - startPos.x
+                  const dy = y - startPos.y
+                  const radius = Math.sqrt(dx * dx + dy * dy)
+
+                  ctx.beginPath()
+                  ctx.arc(startPos.x, startPos.y, radius, 0, Math.PI * 2)
+                  ctx.strokeStyle = brushColor
+                  ctx.lineWidth = brushWeight
+                  ctx.stroke()
+                  ctx.closePath()
+
+                  setStartPos(null)
+                  setDrawCircle(false)
+                }
+
+                if (drawSquare && startPos) {
+                  const canvas = canvasRef.current
+                  if (!canvas) return
+                  const ctx = canvas.getContext("2d")
+                  if (!ctx) return
+
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+
+                  ctx.beginPath()
+                  ctx.rect(startPos.x, startPos.y, x - startPos.x, y - startPos.y)
+                  ctx.strokeStyle = brushColor
+                  ctx.lineWidth = brushWeight
+                  ctx.stroke()
+                  ctx.closePath()
+
+                  setStartPos(null)
+                  setDrawSquare(false)
+                }
+
+                if (drawTriangle && startPos) {
+                  const canvas = canvasRef.current
+                  if (!canvas) return
+                  const ctx = canvas.getContext("2d")
+                  if (!ctx) return
+
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+
+                  ctx.beginPath()
+                  ctx.moveTo(startPos.x, startPos.y)
+                  ctx.lineTo(x, y)
+                  ctx.lineTo(startPos.x + (x - startPos.x) / 2, startPos.y - Math.abs(x - startPos.x))
+                  ctx.closePath()
+                  ctx.strokeStyle = brushColor
+                  ctx.lineWidth = brushWeight
+                  ctx.stroke()
+
+                  setStartPos(null)
+                  setDrawTriangle(false)
+                }
+
+                if (drawStar && startPos) {
+                  const canvas = canvasRef.current
+                  if (!canvas) return
+                  const ctx = canvas.getContext("2d")
+                  if (!ctx) return
+
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+
+                  const centerX = startPos.x
+                  const centerY = startPos.y
+                  const dx = x - centerX
+                  const dy = y - centerY
+                  const outerRadius = Math.sqrt(dx * dx + dy * dy)
+                  const innerRadius = outerRadius / 2.5
+                  const spikes = 5
+
+                  ctx.beginPath()
+                  for (let i = 0; i < spikes * 2; i++) {
+                    const angle = (Math.PI / spikes) * i
+                    const radius = i % 2 === 0 ? outerRadius : innerRadius
+                    const px = centerX + radius * Math.cos(angle - Math.PI / 2)
+                    const py = centerY + radius * Math.sin(angle - Math.PI / 2)
+                    if (i === 0) ctx.moveTo(px, py)
+                    else ctx.lineTo(px, py)
+                  }
+
+                  ctx.closePath()
+                  ctx.strokeStyle = brushColor
+                  ctx.lineWidth = brushWeight
+                  ctx.stroke()
+
+                  setDrawing(false)
+                  setStartPos(null)
+                  setDrawStar(false)
+                }
+              }}
+              onMouseLeave={() => {
+                setDrawing(false)
+                setLastDrawPos(null)
+                setStartPos(null)
+              }}
+              className="w-full aspect-video bg-white rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-md mb-4"
+            />
+
 
             {/* Tools */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4`}>
+              {/* 灰幕遮罩 */}
+              {!players.find((player) => player.name === myname)?.isDrawing && (
+                <div className="absolute mt-[58%] h-90 inset-0 bg-gray-500 opacity-75 z-10 flex items-center justify-center rounded-lg">
+                  <span className="text-white font-bold">Only the drawer can use tools</span>
+                </div>
+              )}
               {/* Color palette */}
               <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg">
                 <div className="text-sm font-medium mb-2 text-zinc-600 dark:text-zinc-400">Colors</div>
@@ -599,6 +826,10 @@ export default function RoomPage() {
                         <button ref={buttonEraser} className={`w-10 h-10 bg-white dark:bg-zinc-700 ${eraserActive ? "ring-2 ring-offset-2 ring-indigo-500" : ""} rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer`} onClick={() => {
                           setEraserActive(!eraserActive)
                           setFillActive(false) // Disable fill when eraser is selected
+                          setDrawCircle(false)
+                          setDrawSquare(false)
+                          setDrawTriangle(false)
+                          setDrawStar(false)
                         }
                         }>
                           <Eraser className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
@@ -614,8 +845,12 @@ export default function RoomPage() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button className={`w-10 h-10 bg-white ${fillActive ? "ring-2 ring-offset-2 ring-indigo-500" : ""} dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer`} onClick={() => {
-                          setFillActive(true)
-                          setEraserActive(false) // Disable eraser when fill is selected
+                            setFillActive(true)
+                            setEraserActive(false) // Disable eraser when fill is selected
+                            setDrawCircle(false)
+                            setDrawSquare(false)
+                            setDrawTriangle(false)
+                            setDrawStar(false)
                           }}>
                           <PaintBucket className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
@@ -629,7 +864,15 @@ export default function RoomPage() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer" onClick={() => {Redo(); setEraserActive(false); setFillActive(false)}}>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer" onClick={() => {
+                            Redo()
+                            setEraserActive(false)
+                            setFillActive(false)
+                            setDrawCircle(false)
+                            setDrawSquare(false)
+                            setDrawTriangle(false)
+                            setDrawStar(false)
+                          }}>
                           <RotateCcw className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
                       </TooltipTrigger>
@@ -642,7 +885,15 @@ export default function RoomPage() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer" onClick={() => {clearCanvas(); setEraserActive(false); setFillActive(false)}}>
+                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer" onClick={() => {
+                          clearCanvas()
+                          setEraserActive(false)
+                          setFillActive(false)
+                          setDrawCircle(false)
+                          setDrawSquare(false)
+                          setDrawTriangle(false)
+                          setDrawStar(false)
+                          }}>
                           <Trash className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
                       </TooltipTrigger>
@@ -661,7 +912,14 @@ export default function RoomPage() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer">
+                        <button className={`w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center ${drawCircle ? "ring-2 ring-offset-2 ring-indigo-500" : ""} hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer`} onClick={() => {
+                          setDrawCircle(true)
+                          setDrawSquare(false)
+                          setDrawTriangle(false)
+                          setDrawStar(false)
+                          setEraserActive(false) // Disable eraser when shape is selected
+                          setFillActive(false) // Disable fill when shape is selected
+                        }}>
                           <Circle className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
                       </TooltipTrigger>
@@ -674,7 +932,14 @@ export default function RoomPage() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer">
+                        <button className={`w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center ${drawSquare ? "ring-2 ring-offset-2 ring-indigo-500" : ""} hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer`} onClick={() => {
+                          setDrawCircle(false)
+                          setDrawSquare(true)
+                          setDrawTriangle(false)
+                          setDrawStar(false)
+                          setEraserActive(false) // Disable eraser when shape is selected
+                          setFillActive(false) // Disable fill when shape is selected
+                        }}>
                           <Square className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
                       </TooltipTrigger>
@@ -687,7 +952,14 @@ export default function RoomPage() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer">
+                        <button className={`w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center ${drawTriangle ? "ring-2 ring-offset-2 ring-indigo-500" : ""} hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer`} onClick={() => {
+                          setDrawCircle(false)
+                          setDrawSquare(false)
+                          setDrawTriangle(true)
+                          setDrawStar(false)
+                          setEraserActive(false) // Disable eraser when shape is selected
+                          setFillActive(false) // Disable fill when shape is selected
+                        }}>
                           <Triangle className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
                       </TooltipTrigger>
@@ -700,7 +972,14 @@ export default function RoomPage() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer">
+                        <button className={`w-10 h-10 bg-white dark:bg-zinc-700 rounded-md flex items-center justify-center ${drawStar ? "ring-2 ring-offset-2 ring-indigo-500" : ""} hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors hover:cursor-pointer`} onClick={() => {
+                          setDrawCircle(false)
+                          setDrawSquare(false)
+                          setDrawTriangle(false)
+                          setDrawStar(true)
+                          setEraserActive(false) // Disable eraser when shape is selected
+                          setFillActive(false) // Disable fill when shape is selected
+                        }}>
                           <Star className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
                         </button>
                       </TooltipTrigger>
@@ -790,6 +1069,16 @@ export default function RoomPage() {
             transform: translate(0, 0) scale(1);
           }
         }
+
+        --shaking: horizontal-shaking 0.2s ease-in-out;
+
+        @keyframes horizontal-shaking {
+          0% { transform: translateX(0) }
+          25% { transform: translateX(5px) }
+          50% { transform: translateX(-5px) }
+          75% { transform: translateX(5px) }
+          100% { transform: translateX(0) }
+          }
       `}</style>
     </div>
   )
