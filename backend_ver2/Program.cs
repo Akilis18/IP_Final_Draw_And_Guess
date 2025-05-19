@@ -23,7 +23,7 @@ app.Use(async (context, next) =>
         clients.Add(ws);
         Console.WriteLine("Client connected. Total: " + clients.Count);
 
-        var buffer = new byte[1024 * 1024]; // 建議至少 1MB
+        var buffer = new byte[1024 * 1024 * 1024]; // 建議至少 1MB
 
         while (ws.State == WebSocketState.Open)
         {

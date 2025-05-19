@@ -171,22 +171,46 @@ export default function RoomPage() {
   };
   }, []);
   
-  // send canvas data every second
+  // send canvas data only if I am the current drawer, and在0.3秒內沒有畫圖才上傳canvas
   useEffect(() => {
-      const interval = setInterval(() => {
+    let timeout: NodeJS.Timeout | null = null;
+
+    // 追蹤是否正在畫圖
+    if (!players.find((player) => player.name === myname)?.isDrawing) return;
+
+    // 監聽 isDrawing 狀態
+    if (!isDrawing) {
+      // 停止畫圖後，延遲0.3秒再上傳
+      timeout = setTimeout(() => {
         const canvas = canvasRef.current;
-        if (canvas && socketRef.current?.readyState === WebSocket.OPEN) {
+        if (
+          canvas &&
+          socketRef.current?.readyState === WebSocket.OPEN
+        ) {
+          // Check if canvas is not blank
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          const pixelBuffer = new Uint32Array(
+            ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+          );
+          const isBlank = !pixelBuffer.some((color) => color !== 0);
+          if (isBlank) return;
+
           const base64Image = canvas.toDataURL("image/png");
-
-          socketRef.current.send(JSON.stringify({
-            type: "canvasUpdate",
-            image: base64Image,
-          }));
+          socketRef.current.send(
+            JSON.stringify({
+              type: "canvasUpdate",
+              image: base64Image,
+            })
+          );
         }
-      }, 1000); // <-- 每秒傳一次
+      }, 300);
+    }
 
-      return () => clearInterval(interval);
-    }, []);
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [isDrawing, players, myname]);
 
   // Timer effect
   useEffect(() => {
@@ -479,10 +503,6 @@ export default function RoomPage() {
     ctx.lineTo(x, y)
     ctx.stroke()
     setLastDrawPos({ x, y })
-
-    // Send drawing data to server
-    
-
   }
 
   const clearCanvas = () => {
