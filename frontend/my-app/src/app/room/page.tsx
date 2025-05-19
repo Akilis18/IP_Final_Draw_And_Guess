@@ -57,23 +57,21 @@ function PopUpSetName({
 
 export default function RoomPage() {
   // State management
+  const clientId = useRef(crypto.randomUUID())
   const [brushWeight, setBrushWeight] = useState(4)
   const [brushColor, setBrushColor] = useState("#4F46E5")
   const [chatMessages, setChatMessages] = useState<{ playerName: string; message: string; isCurrentUser: boolean }[]>([
-    { playerName: "System", message: "Welcome to Draw & Guess! The game will start soon.", isCurrentUser: false },
+    /*{ playerName: "System", message: "Welcome to Draw & Guess! The game will start soon.", isCurrentUser: false },
     { playerName: "Player 2", message: "Hello everyone!", isCurrentUser: false },
-    { playerName: "Player 3", message: "I'm ready to play!", isCurrentUser: false },
+    { playerName: "Player 3", message: "I'm ready to play!", isCurrentUser: false },*/
   ])
   const [currentWord, setCurrentWord] = useState("butterfly")
   const [timeLeft, setTimeLeft] = useState(60)
-  const [currentDrawer, setCurrentDrawer] = useState("Player 1")
+  const [currentDrawer, setCurrentDrawer] = useState("")
   const [myname, setmyname] = useState("Guest")
   const [showNamePopup, setShowNamePopup] = useState(true)
-  const [players, setPlayers] = useState([
-    { name: "Player 1", score: 120, isDrawing: false },
-    { name: "Player 2", score: 85, isDrawing: false },
-    { name: "Player 3", score: 65, isDrawing: false },
-    { name: "Player 4", score: 30, isDrawing: false },
+  const [players, setPlayers] = useState<{name: string, score: number, isDrawing: boolean}[]>([ 
+    // { name: myname, score: 120, isDrawing: false }
   ])
   const [isDrawing, setDrawing] = useState(false)
   const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null)
@@ -84,11 +82,11 @@ export default function RoomPage() {
   const [drawSquare, setDrawSquare] = useState(false)
   const [drawTriangle, setDrawTriangle] = useState(false)
   const [drawStar, setDrawStar] = useState(false)
-
+  
   const previousCanvasRef = useRef<HTMLCanvasElement | null>(null) //for redo
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const buttonEraser = useRef<HTMLButtonElement | null>(null)
-
+  const socketRef = useRef<WebSocket | null>(null)
 
 
   // Colors palette
@@ -109,6 +107,86 @@ export default function RoomPage() {
     "#F59E0B",
     "#6B7280",
   ]
+  // websocket connection
+  useEffect(() => {
+  const socket = new WebSocket("ws://localhost:5000");
+  socketRef.current = socket;
+
+  socket.onopen = () => {
+    console.log("WebSocket connected");
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "chat") {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          playerName: data.senderId === clientId.current ? "You" : data.name,
+          isCurrentUser: data.senderId === clientId.current,
+          message: data.message,
+        },
+      ]);
+    }
+    // 未來可擴充處理：畫圖、換人、倒數等
+    if (data.type === "canvasUpdate") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = data.image;
+    }
+    /*
+    if (data.type === "draw") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.weight;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(data.fromX, data.fromY);
+      ctx.lineTo(data.toX, data.toY);
+      ctx.stroke();
+    }
+      */
+  };
+
+  socket.onclose = () => {
+    console.log("WebSocket disconnected");
+  };
+
+  return () => {
+    socket.close();
+  };
+  }, []);
+  
+  // send canvas data every second
+  useEffect(() => {
+      const interval = setInterval(() => {
+        const canvas = canvasRef.current;
+        if (canvas && socketRef.current?.readyState === WebSocket.OPEN) {
+          const base64Image = canvas.toDataURL("image/png");
+
+          socketRef.current.send(JSON.stringify({
+            type: "canvasUpdate",
+            image: base64Image,
+          }));
+        }
+      }, 1000); // <-- 每秒傳一次
+
+      return () => clearInterval(interval);
+    }, []);
 
   // Timer effect
   useEffect(() => {
@@ -130,6 +208,22 @@ export default function RoomPage() {
     setBrushColor(color)
   }
 
+  const handleSendChat = () => {
+  const chatInput = document.getElementById("chatInput") as HTMLInputElement
+  const message = chatInput.value.trim()
+  if (message && socketRef.current?.readyState === WebSocket.OPEN) {
+    const payload = {
+      type: "chat",
+      name: myname,
+      message: message,
+      senderId: clientId.current,
+    }
+    socketRef.current.send(JSON.stringify(payload))
+    chatInput.value = ""
+  }
+}
+
+  /*
   const handleSendChat = () => {
     const chatInput = document.getElementById("chatInput") as HTMLInputElement
     const message = chatInput.value.trim()
@@ -162,7 +256,7 @@ export default function RoomPage() {
       }
     }
   }
-
+  */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSendChat()
@@ -385,6 +479,10 @@ export default function RoomPage() {
     ctx.lineTo(x, y)
     ctx.stroke()
     setLastDrawPos({ x, y })
+
+    // Send drawing data to server
+    
+
   }
 
   const clearCanvas = () => {
@@ -504,6 +602,7 @@ export default function RoomPage() {
         onSubmit={() => {
           if (myname.trim()) {
 
+            //socket connect
             if (players.find((player) => player.name === myname)) {
               const nameInput = document.getElementById("nameInput") as HTMLInputElement
               const nameInputWarning = document.querySelector(".nameInputWarning") as HTMLLabelElement
@@ -754,7 +853,7 @@ export default function RoomPage() {
             <div className={`grid grid-cols-1 md:grid-cols-2 gap-4`}>
               {/* 灰幕遮罩 */}
               {!players.find((player) => player.name === myname)?.isDrawing && (
-                <div className="absolute mt-[58%] h-90 inset-0 bg-gray-500 opacity-75 z-10 flex items-center justify-center rounded-lg">
+                <div className="absolute mt-[58%] h-90 sm:h-128 inset-0 bg-gray-500 opacity-75 z-10 flex items-center justify-center rounded-lg">
                   <span className="text-white font-bold">Only the drawer can use tools</span>
                 </div>
               )}
