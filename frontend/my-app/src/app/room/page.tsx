@@ -84,9 +84,9 @@ function QuestionSelection (
     question2,
     selectQuestion
   }: {
-    question1?: string
-    question2?: string
-    selectQuestion: (question?: string) => void
+    question1: string
+    question2: string
+    selectQuestion: (question: string) => void
   }
 ){
   return (
@@ -118,7 +118,7 @@ export default function RoomPage() {
   const [currentWord, setCurrentWord] = useState("")
   const [timeLeft, setTimeLeft] = useState(60)
   const [currentDrawer, setCurrentDrawer] = useState("")
-  const [myname, setmyname] = useState("Guest")
+  const [myname, setmyname] = useState("")
   const [showNamePopup, setShowNamePopup] = useState(true)
   const [bottomNotification, setBottomNotification] = useState(false)
   const [showQuestionSelection, setShowQuestionSelection] = useState(false)
@@ -139,6 +139,10 @@ export default function RoomPage() {
   const [drawTriangle, setDrawTriangle] = useState(false)
   const [drawStar, setDrawStar] = useState(false)
   const [nameError, setNameError] = useState("");
+  const [round, setRound] = useState(1)
+
+  const [showHint, setShowHint] = useState(0)
+  const [guessShowWord, setGuessShowWord] = useState("")
   
   const previousCanvasRef = useRef<HTMLCanvasElement | null>(null) //for redo
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -165,9 +169,11 @@ export default function RoomPage() {
     "#6B7280",
   ]
   // websocket connection
+
   useEffect(() => {
   const socket = new WebSocket("ws://localhost:5000");
   socketRef.current = socket;
+  
 
   socket.onopen = () => {
     console.log("WebSocket connected");
@@ -216,21 +222,26 @@ export default function RoomPage() {
       setBottomNotification(true)
       setBottomNotificationMessage(`${data.artist} is drawing now!`)
 
-      console.log(myname)
-      console.log(currentDrawer)
-
-      if (myname === currentDrawer) {
-        setShowQuestionSelection(true)
-        setQuestion1(data.question1)
-        setQuestion2(data.question2)
-      }
-
       setTimeout(() => {
         setBottomNotification(false)
       }, 3000)
     }
+    if (data.type === "question") {
+      setQuestion1(data.question1);
+      setQuestion2(data.question2);
+      setShowQuestionSelection(true)
+    }
     if (data.type === "clearCanvas") {
       artistDisconnectClearCanvas()
+    }
+    if (data.type === "showHint") {
+      console.log(data.word)
+      setShowHint(data.hintLevel);
+      questionShowHint(data.hintLevel, data.word)
+    }
+    if (data.type === "selectWord") {
+      setCurrentWord(data.word);
+      setShowHint(0);
     }
     if (data.error === "Name already exists") {
       //socket connect
@@ -696,6 +707,35 @@ export default function RoomPage() {
     }
   };
 
+  const questionShowHint = (hintLevel: number, setword: string) => {
+    if (hintLevel <= 0) {
+      const word = setword.split("").map((char) => "_").join(" ")
+      setGuessShowWord(word)
+    }
+    else if (hintLevel < 4) {
+      let currentguess = ""
+      for (let i = 0; i < hintLevel - 1; i++)
+        currentguess += setword[i] + " "
+      for (let i = hintLevel - 1; i < setword.length; i++) { 
+        if (setword[i] === " ") {
+          currentguess += " "
+        }
+        else {
+          currentguess += "_ "
+        }
+      }
+      setGuessShowWord(currentguess)
+    }
+    else {
+      setBottomNotification(true)
+      setBottomNotificationMessage("No more hints available.")
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
+    }
+    setShowHint(hintLevel)
+  }
+
   // Player component
   const PlayerItem = ({ player }: { player: { name: string; score: number; isDrawing: boolean } }) => (
     <div
@@ -767,8 +807,8 @@ export default function RoomPage() {
               })
             )
             
-
             localStorage.setItem("playerName", myname)
+            setmyname(myname) // 更新狀態
             setShowNamePopup(false) // 關閉彈窗
           }
         }}
@@ -788,6 +828,8 @@ export default function RoomPage() {
                   clientId: clientId.current,
                 })
               )
+              setCurrentWord(question)
+              setShowHint(0)
             }}
           />
         )
@@ -823,12 +865,9 @@ export default function RoomPage() {
             <div>
               <div className="text-sm text-zinc-500 dark:text-zinc-400">Current word</div>
               <div className="text-xl font-bold tracking-wider">
-                {players.find((p) => p.name === "You")?.isDrawing
+                {players.find((p) => p.name === myname)?.isDrawing
                   ? currentWord
-                  : currentWord
-                      .split("")
-                      .map((char) => "_")
-                      .join(" ")}
+                  : guessShowWord}
               </div>
             </div>
             <div className="bg-indigo-100 dark:bg-indigo-900/50 p-2 rounded-lg">
@@ -846,7 +885,7 @@ export default function RoomPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200">Players</h2>
               <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                Round 2/5
+                Round {round}
               </Badge>
             </div>
 
@@ -1271,6 +1310,14 @@ export default function RoomPage() {
               <Button
                 variant="outline"
                 className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border-indigo-300 hover:cursor-pointer dark:bg-indigo-900/30 dark:hover:bg-indigo-800/50 dark:text-indigo-300 dark:border-indigo-700"
+                onClick={() => {
+                  socketRef.current?.send(JSON.stringify({
+                    type: "showHint",
+                    hintLevel: showHint + 1,
+                    word: currentWord,
+                  }))
+                  setShowHint(showHint + 1)
+                }}
               >
                 <HelpCircle className="w-4 h-4 mr-2" />
                 Show Hint
@@ -1313,6 +1360,7 @@ export default function RoomPage() {
                 placeholder="Type your guess..."
                 className="w-full p-3 pr-12 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white/90 dark:bg-zinc-800/90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 onKeyDown={handleKeyDown}
+                disabled={players.find((player) => player.name === myname)?.isDrawing} // Disable input if not the current player
               />
               <button
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md text-indigo-600 hover:bg-indigo-100 dark:text-indigo-400 dark:hover:bg-indigo-900/30"

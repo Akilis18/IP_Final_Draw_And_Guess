@@ -22,13 +22,13 @@ bool IsValidJson(string str)
 Game game = new();
 int artistIndex = 0;
 
-void setArtist(int index)
+async void setArtist(int index)
 {
     // Random pick 2 questions from the QuestionBank
     var random = new Random();
     var question1 = QuestionBank.Questions[random.Next(0, QuestionBank.Questions.Count)];
-    var question2 = "";
-    while (question2 == question1)
+    var question2 = QuestionBank.Questions[random.Next(0, QuestionBank.Questions.Count)];
+    while (question1 == question2)
     {
         question2 = QuestionBank.Questions[random.Next(0, QuestionBank.Questions.Count)];
     }
@@ -41,12 +41,12 @@ void setArtist(int index)
     var artist = game.Players[index];
     artist.isDrawing = true;
     Console.WriteLine("Artist set: " + artist.Name);
-    var notifyMessage = $"{{\"type\": \"artist\", \"artist\": \"{artist.Name}\", \"question1\": \"{question1}\", \"question2\": \"{question2}\"}}";
+    var notifyMessage = $"{{\"type\": \"artist\", \"artist\": \"{artist.Name}\"}}";
     foreach (var client in clients.ToList())
     {
         if (client.State == WebSocketState.Open)
         {
-            client.SendAsync(
+            await client.SendAsync(
                 Encoding.UTF8.GetBytes(notifyMessage),
                 WebSocketMessageType.Text,
                 true,
@@ -54,13 +54,32 @@ void setArtist(int index)
             );
         }
     }
+
+    // send question to artist
+    var questionMessage = $"{{\"type\": \"question\", \"question1\": \"{question1}\", \"question2\": \"{question2}\"}}";
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open && client.GetHashCode().ToString() == artist.ClientId)
+        {
+            await client.SendAsync(
+                Encoding.UTF8.GetBytes(questionMessage),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
     var playerList = new StringBuilder();
     playerList.Append("{\"type\": \"playerList\", \"players\": [");
     foreach (var player in game.Players)
     {
         playerList.Append($"{{\"name\": \"{player.Name}\", \"score\": {player.Score}, \"isDrawing\": {player.isDrawing.ToString().ToLower()}}},");
     }
-    playerList.Remove(playerList.Length - 1, 1); // remove last comma
+    if (game.Players.Count > 0)
+    {
+        playerList.Remove(playerList.Length - 1, 1); // remove last comma
+    }
     playerList.Append("]}");
     foreach (var client in clients.ToList())
     {
@@ -170,9 +189,11 @@ app.Use(async (context, next) =>
                             }
                         }
                     }
-                    else if (root.TryGetProperty("type", out type) && type.GetString() == "setWord")
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "selectWord")
                     {
-                        Console.WriteLine("Set word: " + root.GetProperty("word").GetString());
+                        string selectedWord = root.GetProperty("word").GetString();
+                        game.Question = selectedWord;
+                        Console.WriteLine("Selected word: " + selectedWord);
                     }
                     else if (root.TryGetProperty("type", out type) && type.GetString() == "setTime")
                     {
