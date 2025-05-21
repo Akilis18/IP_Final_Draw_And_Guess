@@ -29,10 +29,12 @@ function PopUpSetName({
   name,
   setName,
   onSubmit,
+  nameError,
 }: {
   name: string
   setName: (name: string) => void
   onSubmit: () => void
+  nameError?: string
 }) {
   return (
     <div className="fixed z-50 top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
@@ -46,7 +48,11 @@ function PopUpSetName({
           placeholder="Enter your name"
           className="w-full p-3 border border-zinc-300 dark:border-zinc-700 rounded-lg"
         />
-        <label id="nameInputWarning" className="nameInputWarning text-sm text-red-700 dark:text-red-400 mb-4 hidden">This name is taken, try another one.</label>
+        {nameError && (
+          <label className="nameInputWarning text-sm text-red-700 dark:text-red-400 mb-4">
+            {nameError}
+          </label>
+        )}
         <Button onClick={onSubmit} className="w-full hover:scale-105 transition-transform duration-200 hover:cursor-pointer mt-4">
           Submit
         </Button>
@@ -54,6 +60,50 @@ function PopUpSetName({
     </div>
   )
 }
+
+function BottomNotificationComp(
+  { bottomNotificationMessage }: { bottomNotificationMessage?: string }
+){
+  return (
+    <div className="fixed bottom-0 z-14 w-3/4 left-60 right-50 p-4 bg-white dark:bg-zinc-900 rounded-t-lg shadow-lg border-t-2 border-indigo-500">
+      <div className="flex items-center justify-between">
+        {
+          bottomNotificationMessage && (
+            <div className="text-md text-zinc-700 dark:text-zinc-300">
+              {bottomNotificationMessage}
+            </div>
+          )
+        }
+      </div>
+    </div>
+  )
+}
+
+function QuestionSelection (
+  { question1,
+    question2,
+    selectQuestion
+  }: {
+    question1?: string
+    question2?: string
+    selectQuestion: (question?: string) => void
+  }
+){
+  return (
+    <div className="fixed z-50 top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+      <div className="bg-white dark:bg-zinc-800 rounded-lg p-6 shadow-lg">
+        <h2 className="text-lg font-bold mb-4">Select a Word</h2>
+        <div className="flex flex-col space-y-4">
+          <Button onClick={() => selectQuestion(question1)}>{question1}</Button>
+          <Button onClick={() => selectQuestion(question2)}>{question2}</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+
 
 export default function RoomPage() {
   // State management
@@ -65,11 +115,17 @@ export default function RoomPage() {
     { playerName: "Player 2", message: "Hello everyone!", isCurrentUser: false },
     { playerName: "Player 3", message: "I'm ready to play!", isCurrentUser: false },*/
   ])
-  const [currentWord, setCurrentWord] = useState("butterfly")
+  const [currentWord, setCurrentWord] = useState("")
   const [timeLeft, setTimeLeft] = useState(60)
   const [currentDrawer, setCurrentDrawer] = useState("")
   const [myname, setmyname] = useState("Guest")
   const [showNamePopup, setShowNamePopup] = useState(true)
+  const [bottomNotification, setBottomNotification] = useState(false)
+  const [showQuestionSelection, setShowQuestionSelection] = useState(false)
+
+  const [question1, setQuestion1] = useState("")
+  const [question2, setQuestion2] = useState("")
+  const [bottomNotificationMessage, setBottomNotificationMessage] = useState("")
   const [players, setPlayers] = useState<{name: string, score: number, isDrawing: boolean}[]>([ 
     // { name: myname, score: 120, isDrawing: false }
   ])
@@ -82,6 +138,7 @@ export default function RoomPage() {
   const [drawSquare, setDrawSquare] = useState(false)
   const [drawTriangle, setDrawTriangle] = useState(false)
   const [drawStar, setDrawStar] = useState(false)
+  const [nameError, setNameError] = useState("");
   
   const previousCanvasRef = useRef<HTMLCanvasElement | null>(null) //for redo
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -118,6 +175,9 @@ export default function RoomPage() {
 
   socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    if (data.type === "playerList") {
+      setPlayers(data.players);
+    }
     if (data.type === "chat") {
       setChatMessages((prev) => [
         ...prev,
@@ -143,6 +203,42 @@ export default function RoomPage() {
       };
       img.src = data.image;
     }
+    //系統訊息
+    if (data.type === "bottomNotices") {
+      setBottomNotification(true)
+      setBottomNotificationMessage(data.message)
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
+    }
+    if (data.type === "artist") {
+      setCurrentDrawer(data.artist);
+      setBottomNotification(true)
+      setBottomNotificationMessage(`${data.artist} is drawing now!`)
+
+      console.log(myname)
+      console.log(currentDrawer)
+
+      if (myname === currentDrawer) {
+        setShowQuestionSelection(true)
+        setQuestion1(data.question1)
+        setQuestion2(data.question2)
+      }
+
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
+    }
+    if (data.type === "clearCanvas") {
+      artistDisconnectClearCanvas()
+    }
+    if (data.error === "Name already exists") {
+      //socket connect
+      setShowNamePopup(true)
+      setShowNamePopup(true);
+      setNameError("This name is taken, try another one.");
+      return;
+    }
     /*
     if (data.type === "draw") {
       const canvas = canvasRef.current;
@@ -164,6 +260,8 @@ export default function RoomPage() {
 
   socket.onclose = () => {
     console.log("WebSocket disconnected");
+    alert("Connection lost. Please refresh the page.");
+    window.location.reload();
   };
 
   return () => {
@@ -171,7 +269,7 @@ export default function RoomPage() {
   };
   }, []);
   
-  // send canvas data only if I am the current drawer, and在0.3秒內沒有畫圖才上傳canvas
+  // send canvas data only if I am the current drawer, and在0.1秒內沒有畫圖才上傳canvas
   useEffect(() => {
     let timeout: NodeJS.Timeout | null = null;
 
@@ -180,7 +278,7 @@ export default function RoomPage() {
 
     // 監聽 isDrawing 狀態
     if (!isDrawing) {
-      // 停止畫圖後，延遲0.3秒再上傳
+      // 停止畫圖後，延遲0.1秒再上傳
       timeout = setTimeout(() => {
         const canvas = canvasRef.current;
         if (
@@ -204,7 +302,7 @@ export default function RoomPage() {
             })
           );
         }
-      }, 300);
+      }, 100);
     }
 
     return () => {
@@ -505,6 +603,16 @@ export default function RoomPage() {
     setLastDrawPos({ x, y })
   }
 
+  const artistDisconnectClearCanvas = () => {
+    const canvas = canvasRef.current
+      if (!canvas) return //if canvas is not ready
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return //if context is not ready
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      setLastDrawPos(null) // Reset last position
+  }
+
   const clearCanvas = () => {
     const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
     if (!amIDrawing) return //if not the current player
@@ -517,6 +625,7 @@ export default function RoomPage() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     setLastDrawPos(null) // Reset last position
+    uploadCanvas()
   }
 
   const saveCanvas = () => {
@@ -558,9 +667,34 @@ export default function RoomPage() {
       const previousCtx = previousCanvas.getContext("2d")
       if (previousCtx) {
         ctx.drawImage(previousCanvas, 0, 0)
+        uploadCanvas();
       }
     }
   }
+  
+  const uploadCanvas = () => {
+    const canvas = canvasRef.current;
+    if (
+      canvas &&
+      socketRef.current?.readyState === WebSocket.OPEN
+    ) {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const pixelBuffer = new Uint32Array(
+        ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+      );
+      const isBlank = !pixelBuffer.some((color) => color !== 0);
+      if (isBlank) return;
+
+      const base64Image = canvas.toDataURL("image/png");
+      socketRef.current.send(
+        JSON.stringify({
+          type: "canvasUpdate",
+          image: base64Image,
+        })
+      );
+    }
+  };
 
   // Player component
   const PlayerItem = ({ player }: { player: { name: string; score: number; isDrawing: boolean } }) => (
@@ -615,32 +749,53 @@ export default function RoomPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden ml-auto mr-auto">
-
+      {
+        bottomNotification && <BottomNotificationComp bottomNotificationMessage={bottomNotificationMessage} />
+      }
       {showNamePopup && <PopUpSetName
         name={myname}
         setName={setmyname}
         onSubmit={() => {
           if (myname.trim()) {
-
-            //socket connect
-            if (players.find((player) => player.name === myname)) {
-              const nameInput = document.getElementById("nameInput") as HTMLInputElement
-              const nameInputWarning = document.querySelector(".nameInputWarning") as HTMLLabelElement
-              nameInputWarning.classList.remove("hidden")
-              nameInputWarning.innerText = "This name is taken, try another one."
-              nameInput.classList.add("border-red-500 shaking")
-              return
-            }
+            // send name to server
+            socketRef.current?.send(
+              JSON.stringify({
+                type: "setName",
+                name: myname,
+                clientId: clientId.current,
+                token: Date.now(),
+              })
+            )
+            
 
             localStorage.setItem("playerName", myname)
             setShowNamePopup(false) // 關閉彈窗
-            setPlayers((prev) => [
-                ...prev,
-                { name: myname, score: 0, isDrawing: true },
-            ])
           }
         }}
+        nameError={nameError}
       />}
+      {
+        showQuestionSelection && (
+          <QuestionSelection
+            question1={question1}
+            question2={question2}
+            selectQuestion={(question) => {
+              setShowQuestionSelection(false)
+              socketRef.current?.send(
+                JSON.stringify({
+                  type: "selectWord",
+                  word: question,
+                  clientId: clientId.current,
+                })
+              )
+            }}
+          />
+        )
+      }
+      {/* Footer */}
+
+      {/* Chat section */}
+
       {/* Dynamic Background */}
       <BackgroundLayout />
 
@@ -703,7 +858,7 @@ export default function RoomPage() {
 
             <Separator className="my-4" />
 
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">Waiting for more players...</div>
+            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">Waiting for more players... (3 players to start)</div>
           </div>
         </div>
 
