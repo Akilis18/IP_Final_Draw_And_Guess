@@ -1,0 +1,53 @@
+namespace backend_ver2.Questions
+{
+    public static class QuestionBank
+    {
+        public static List<string> Questions { get; } = new()
+        {
+            "apple",
+            "banana",
+            "grape",
+            "orange",
+            "watermelon",
+            "strawberry",
+            "blueberry",
+            "kiwi",
+            "mango",
+            "pineapple",
+            "peach",
+            "pear",
+            "cherry",
+            "plum",
+            "apricot",
+            "airplane",
+            "car",
+            "train",
+            "bicycle",
+            "bus",
+            "motorcycle",
+            "boat",
+            "rocket",
+            "helicopter",
+            "skateboard",
+            "scooter",
+            "submarine",
+            "computer",
+            "phone",
+            "television",
+            "camera",
+            "tablet",
+            "watch",
+            "headphones",
+            "keyboard",
+            "mouse",
+            "printer",
+            "router",
+            "television",
+            "laptop",
+            "desktop",
+            "monitor",
+            "speaker",
+            "microphonee"
+        };
+    }
+}
