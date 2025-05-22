@@ -7,6 +7,7 @@ class Player
     public int Score { get; set; }
     public bool isDrawing { get; set; }
     public string ClientId { get; set; }
+    public bool isGuessed {get; set;}
 }
 
 class Game
@@ -16,5 +17,7 @@ class Game
     public int Time { get; set; }
     public int Round { get; set; }
     public string Question { get; set; }
+
+    public List<string> guessList {get; set;} = new();
 }
 
