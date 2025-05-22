@@ -149,6 +149,7 @@ export default function RoomPage() {
   const buttonEraser = useRef<HTMLButtonElement | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
 
+  const [guessed, setGuessed] = useState(false)
 
   // Colors palette
   const colors = [
@@ -183,6 +184,7 @@ export default function RoomPage() {
     const data = JSON.parse(event.data);
     if (data.type === "playerList") {
       setPlayers(data.players);
+
     }
     if (data.type === "chat") {
       setChatMessages((prev) => [
@@ -191,6 +193,19 @@ export default function RoomPage() {
           playerName: data.senderId === clientId.current ? "You" : data.name,
           isCurrentUser: data.senderId === clientId.current,
           message: data.message,
+        },
+      ]);
+    }
+    if(data.type === "systemMessage") {
+      if(data.senderId === clientId.current && !guessed){
+        setGuessed(true)
+      }
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          playerName: "System",
+          message: data.message,
+          isCurrentUser: false,
         },
       ]);
     }
@@ -218,10 +233,10 @@ export default function RoomPage() {
       }, 3000)
     }
     if (data.type === "artist") {
+      setGuessed(false);
       setCurrentDrawer(data.artist);
       setBottomNotification(true)
       setBottomNotificationMessage(`${data.artist} is drawing now!`)
-
       setTimeout(() => {
         setBottomNotification(false)
       }, 3000)
@@ -250,23 +265,6 @@ export default function RoomPage() {
       setNameError("This name is taken, try another one.");
       return;
     }
-    /*
-    if (data.type === "draw") {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      ctx.strokeStyle = data.color;
-      ctx.lineWidth = data.weight;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(data.fromX, data.fromY);
-      ctx.lineTo(data.toX, data.toY);
-      ctx.stroke();
-    }
-      */
   };
 
   socket.onclose = () => {
@@ -1360,7 +1358,7 @@ export default function RoomPage() {
                 placeholder="Type your guess..."
                 className="w-full p-3 pr-12 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white/90 dark:bg-zinc-800/90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 onKeyDown={handleKeyDown}
-                disabled={players.find((player) => player.name === myname)?.isDrawing} // Disable input if not the current player
+                disabled={currentDrawer === myname || guessed} // Disable input if not the current player or guessed
               />
               <button
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md text-indigo-600 hover:bg-indigo-100 dark:text-indigo-400 dark:hover:bg-indigo-900/30"

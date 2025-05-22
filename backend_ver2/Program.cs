@@ -22,8 +22,40 @@ bool IsValidJson(string str)
 Game game = new();
 int artistIndex = 0;
 
+
+object getPlayerList() {
+    var playerList = new StringBuilder();
+    playerList.Append("{\"type\": \"playerList\", \"players\": [");
+    foreach (var p in game.Players)
+    {
+        playerList.Append($"{{\"name\": \"{p.Name}\", \"score\": {p.Score}, \"isDrawing\": {p.isDrawing.ToString().ToLower()}, \"isGuessed\": {p.isGuessed.ToString().ToLower()}}},");
+    }
+    playerList.Remove(playerList.Length - 1, 1); // remove last comma
+    playerList.Append("]}");
+    return playerList;
+}
+
 async void setArtist(int index)
 {
+    game.guessList.Clear();
+    foreach (Player p in game.Players.ToList()) {
+        p.isGuessed = false;
+        p.isDrawing = false;
+    }
+    var pList = getPlayerList();
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            client.SendAsync(
+                Encoding.UTF8.GetBytes(pList.ToString()),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
     // Random pick 2 questions from the QuestionBank
     var random = new Random();
     var question1 = QuestionBank.Questions[random.Next(0, QuestionBank.Questions.Count)];
@@ -36,7 +68,9 @@ async void setArtist(int index)
 
     if (index >= game.Players.Count)
     {
+        // TODO: index bug need to be fixed
         index = 0;
+        artistIndex = 0;
     }
     var artist = game.Players[index];
     artist.isDrawing = true;
@@ -70,17 +104,8 @@ async void setArtist(int index)
         }
     }
 
-    var playerList = new StringBuilder();
-    playerList.Append("{\"type\": \"playerList\", \"players\": [");
-    foreach (var player in game.Players)
-    {
-        playerList.Append($"{{\"name\": \"{player.Name}\", \"score\": {player.Score}, \"isDrawing\": {player.isDrawing.ToString().ToLower()}}},");
-    }
-    if (game.Players.Count > 0)
-    {
-        playerList.Remove(playerList.Length - 1, 1); // remove last comma
-    }
-    playerList.Append("]}");
+    var playerList = getPlayerList();
+    Console.WriteLine(playerList.ToString());
     foreach (var client in clients.ToList())
     {
         if (client.State == WebSocketState.Open)
@@ -103,7 +128,7 @@ app.Use(async (context, next) =>
         clients.Add(ws);
         Console.WriteLine("Client connected. Total: " + clients.Count);
 
-        var buffer = new byte[1024 * 1024 * 1];
+        var buffer = new byte[1024 * 1024 * 4]; // 4MB buffer
 
         try {
             while (ws.State == WebSocketState.Open)
@@ -124,6 +149,7 @@ app.Use(async (context, next) =>
 
                 if (IsValidJson(message))
                 {
+                    bool guessed = false;
                     var doc = System.Text.Json.JsonDocument.Parse(message);
                     var root = doc.RootElement;
                     if (root.TryGetProperty("type", out var type) && type.GetString() == "setName")
@@ -143,18 +169,12 @@ app.Use(async (context, next) =>
                         }
                         else
                         {
-                            game.Players.Add(new Player { Name = name, Score = 0, isDrawing = false, ClientId = ws.GetHashCode().ToString() });
+                            game.Players.Add(new Player { Name = name, Score = 0, isDrawing = false, ClientId = ws.GetHashCode().ToString(), isGuessed = false });
                             Console.WriteLine("Player added: " + name);
                             Console.WriteLine("Players: " + string.Join(", ", game.Players.Select(p => p.Name)));
 
-                            var playerList = new StringBuilder();
-                            playerList.Append("{\"type\": \"playerList\", \"players\": [");
-                            foreach (var player in game.Players)
-                            {
-                                playerList.Append($"{{\"name\": \"{player.Name}\", \"score\": {player.Score}, \"isDrawing\": {player.isDrawing.ToString().ToLower()}}},");
-                            }
-                            playerList.Remove(playerList.Length - 1, 1); // remove last comma
-                            playerList.Append("]}");
+                            var playerList = getPlayerList();
+                            Console.WriteLine(playerList.ToString());
                             foreach (var client in clients.ToList())
                             {
                                 if (client.State == WebSocketState.Open)
@@ -168,7 +188,8 @@ app.Use(async (context, next) =>
                                 }
                             }
 
-                            if (game.Players.Count >= 3) {
+                            if (game.Players.Count >= 3)
+                            {
                                 // Start the game when there are at least 3 players
                                 // Send notification to all players
                                 Console.WriteLine("Starting game...");
@@ -185,9 +206,124 @@ app.Use(async (context, next) =>
                                         );
                                     }
                                 }
-                                setArtist(artistIndex);
+                                setArtist(artistIndex++);
                             }
                         }
+                    }
+                    //chat, check if sender get the answer
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "chat")
+                    {
+                        string chatMessage = root.GetProperty("message").GetString();
+                        string sender = root.GetProperty("name").GetString();
+                        Console.WriteLine("Chat message: " + chatMessage);
+                        var player = game.Players.FirstOrDefault(p => p.Name == sender);
+                        if (player != null)
+                        {
+                            if (game.Question == chatMessage)
+                            {
+                                string senderId = root.GetProperty("senderId").GetString();
+                                guessed = true;
+                                // player.Score += 1;
+                                //player p = game.player.any((p) => p.Name == player.Name);
+                                player.isGuessed = true;
+                                int guessListLen = game.guessList.Count;
+                                if (guessListLen == 0)
+                                {
+                                    player.Score += 50;
+                                }
+                                else if (guessListLen == 1)
+                                {
+                                    player.Score += 40;
+                                }
+                                else if (guessListLen == 2)
+                                {
+                                    player.Score += 30;
+                                }
+                                else player.Score += 20;
+                                game.guessList.Add(player.Name);
+
+                                Console.WriteLine("Player " + player.Name + " guessed the word!");
+                                var systemMessage = $"{{\"type\": \"systemMessage\", \"message\": \"{player.Name} guessed the word!\", \"senderId\": \"{senderId}\"}}";
+                                foreach (var client in clients.ToList())
+                                {
+                                    if (client.State == WebSocketState.Open)
+                                    {
+                                        await client.SendAsync(
+                                            Encoding.UTF8.GetBytes(systemMessage),
+                                            WebSocketMessageType.Text,
+                                            true,
+                                            CancellationToken.None
+                                        );
+                                    }
+                                }
+                                var playerList = getPlayerList();
+                                foreach (var client in clients.ToList())
+                                {
+                                    if (client.State == WebSocketState.Open)
+                                    {
+                                        await client.SendAsync(
+                                            Encoding.UTF8.GetBytes(playerList.ToString()),
+                                            WebSocketMessageType.Text,
+                                            true,
+                                            CancellationToken.None
+                                        );
+                                    }
+                                }
+
+                                if (game.guessList.Count == game.Players.Count - 1)
+                                {
+                                    var clearCanvasMessage = "{\"type\": \"clearCanvas\"}";
+                                    foreach (var client in clients.ToList())
+                                    {
+                                        if (client.State == WebSocketState.Open)
+                                        {
+                                            await client.SendAsync(
+                                                Encoding.UTF8.GetBytes(clearCanvasMessage),
+                                                WebSocketMessageType.Text,
+                                                true,
+                                                CancellationToken.None
+                                            );
+                                        }
+                                    }
+
+                                    var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Everyone got the answer right! Next round begin shortly...\"}";
+                                    foreach (var client in clients.ToList())
+                                    {
+                                        if (client.State == WebSocketState.Open)
+                                        {
+                                            await client.SendAsync(
+                                                Encoding.UTF8.GetBytes(notifyMessage),
+                                                WebSocketMessageType.Text,
+                                                true,
+                                                CancellationToken.None
+                                            );
+                                        }
+                                    }
+
+
+                                    setArtist(artistIndex++);
+                                }
+                            }
+                            else
+                            {
+                                foreach (var client in clients.ToList())
+                                {
+                                    if (client.State == WebSocketState.Open)
+                                    {
+                                        await client.SendAsync(
+                                            Encoding.UTF8.GetBytes(message),
+                                            WebSocketMessageType.Text,
+                                            true,
+                                            CancellationToken.None
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "setArtist")
+                    {
+                        setArtist(artistIndex++);
                     }
                     else if (root.TryGetProperty("type", out type) && type.GetString() == "selectWord")
                     {
@@ -199,17 +335,19 @@ app.Use(async (context, next) =>
                     {
                         Console.WriteLine("Set time: " + root.GetProperty("time").GetInt32());
                     }
-
-                    foreach (var client in clients.ToList())
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "canvasUpdate")
                     {
-                        if (client.State == WebSocketState.Open)
+                        foreach (var client in clients.ToList())
                         {
-                            await client.SendAsync(
-                                Encoding.UTF8.GetBytes(message),
-                                WebSocketMessageType.Text,
-                                true,
-                                CancellationToken.None
-                            );
+                            if (client.State == WebSocketState.Open)
+                            {
+                                await client.SendAsync(
+                                    Encoding.UTF8.GetBytes(message),
+                                    WebSocketMessageType.Text,
+                                    true,
+                                    CancellationToken.None
+                                );
+                            }
                         }
                     }
                 }
@@ -227,14 +365,8 @@ app.Use(async (context, next) =>
             {
                 game.Players.Remove(player);
                 Console.WriteLine("Player removed: " + player.Name);
-                var playerList = new StringBuilder();
-                playerList.Append("{\"type\": \"playerList\", \"players\": [");
-                foreach (var p in game.Players)
-                {
-                    playerList.Append($"{{\"name\": \"{p.Name}\", \"score\": {p.Score}, \"isDrawing\": {p.isDrawing.ToString().ToLower()}}},");
-                }
-                playerList.Remove(playerList.Length - 1, 1); // remove last comma
-                playerList.Append("]}");
+                var playerList = getPlayerList();
+                Console.WriteLine(playerList.ToString());
                 foreach (var client in clients.ToList())
                 {
                     if (client.State == WebSocketState.Open)
