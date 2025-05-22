@@ -21,12 +21,17 @@ bool IsValidJson(string str)
 
 Game game = new();
 int artistIndex = 0;
+bool wordChanged = false;
+bool gameStarted = false;
+string currentDrawer = "";
+int hintLevel = 0;
 
 
 object getPlayerList() {
     var playerList = new StringBuilder();
     playerList.Append("{\"type\": \"playerList\", \"players\": [");
-    foreach (var p in game.Players)
+    List<Player> sortByScore = game.Players.OrderByDescending(p => p.Score).ToList();
+    foreach (var p in sortByScore)
     {
         playerList.Append($"{{\"name\": \"{p.Name}\", \"score\": {p.Score}, \"isDrawing\": {p.isDrawing.ToString().ToLower()}, \"isGuessed\": {p.isGuessed.ToString().ToLower()}}},");
     }
@@ -66,13 +71,20 @@ async void setArtist(int index)
     }
 
 
+    if (game.Players.Count == 0)
+    {
+        Console.WriteLine("No players in the game.");
+        return;
+    }
     if (index >= game.Players.Count)
     {
-        // TODO: index bug need to be fixed
         index = 0;
-        artistIndex = 0;
+        artistIndex = 1;
     }
+    if (index < 0) index = 0;
+
     var artist = game.Players[index];
+    currentDrawer = artist.Name;
     artist.isDrawing = true;
     Console.WriteLine("Artist set: " + artist.Name);
     var notifyMessage = $"{{\"type\": \"artist\", \"artist\": \"{artist.Name}\"}}";
@@ -188,10 +200,30 @@ app.Use(async (context, next) =>
                                 }
                             }
 
-                            if (game.Players.Count >= 3)
+                            if (gameStarted)
+                            {
+                                var CurrentDrawer = $"{{\"type\": \"currentDrawer\", \"artist\": \"{currentDrawer}\"}}";
+                                await ws.SendAsync(
+                                    Encoding.UTF8.GetBytes(CurrentDrawer),
+                                    WebSocketMessageType.Text,
+                                    true,
+                                    CancellationToken.None
+                                );
+
+                                var hintMessage = $"{{\"type\": \"showHint\", \"hintLevel\": {hintLevel}, \"word\": \"{game.Question}\"}}";
+                                await ws.SendAsync(
+                                    Encoding.UTF8.GetBytes(hintMessage),
+                                    WebSocketMessageType.Text,
+                                    true,
+                                    CancellationToken.None
+                                );
+                            }
+
+                            if (game.Players.Count >= 3 && !gameStarted)
                             {
                                 // Start the game when there are at least 3 players
                                 // Send notification to all players
+                                gameStarted = true;
                                 Console.WriteLine("Starting game...");
                                 var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Game is starting!\"}";
                                 foreach (var client in clients.ToList())
@@ -240,6 +272,7 @@ app.Use(async (context, next) =>
                                     player.Score += 30;
                                 }
                                 else player.Score += 20;
+                                game.Players.FirstOrDefault(p => p.Name == currentDrawer).Score += 60 / (game.Players.Count - 1);
                                 game.guessList.Add(player.Name);
 
                                 Console.WriteLine("Player " + player.Name + " guessed the word!");
@@ -300,6 +333,7 @@ app.Use(async (context, next) =>
                                         }
                                     }
 
+                                    await Task.Delay(3000); // wait for 5 seconds before next round
 
                                     setArtist(artistIndex++);
                                 }
@@ -321,9 +355,23 @@ app.Use(async (context, next) =>
                             }
                         }
                     }
-                    else if (root.TryGetProperty("type", out type) && type.GetString() == "setArtist")
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "showHint")
                     {
-                        setArtist(artistIndex++);
+                        //broadcast hint to all clients
+                        hintLevel = root.GetProperty("hintLevel").GetInt32();
+                        string word = root.GetProperty("word").GetString();
+                        foreach (var client in clients.ToList())
+                        {
+                            if (client.State == WebSocketState.Open)
+                            {
+                                await client.SendAsync(
+                                    Encoding.UTF8.GetBytes($"{{\"type\": \"showHint\", \"hintLevel\": {hintLevel}, \"word\": \"{word}\"}}"),
+                                    WebSocketMessageType.Text,
+                                    true,
+                                    CancellationToken.None
+                                );
+                            }
+                        }
                     }
                     else if (root.TryGetProperty("type", out type) && type.GetString() == "selectWord")
                     {
@@ -334,6 +382,67 @@ app.Use(async (context, next) =>
                     else if (root.TryGetProperty("type", out type) && type.GetString() == "setTime")
                     {
                         Console.WriteLine("Set time: " + root.GetProperty("time").GetInt32());
+                    }
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "newWord")
+                    {
+                        if (wordChanged || game.guessList.Count != 0)
+                        {
+                            Console.WriteLine("Word already changed / guessed!");
+                            var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Some players has guessed right or you have changed your word already!\"}";
+                            await ws.SendAsync(
+                                Encoding.UTF8.GetBytes(notifyMessage),
+                                WebSocketMessageType.Text,
+                                true,
+                                CancellationToken.None
+                            );
+                        }
+                        else {
+                            wordChanged = true;
+                            var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Word changed!\"}";
+                            foreach (var client in clients.ToList())
+                            {
+                                if (client.State == WebSocketState.Open)
+                                {
+                                    await client.SendAsync(
+                                        Encoding.UTF8.GetBytes(notifyMessage),
+                                        WebSocketMessageType.Text,
+                                        true,
+                                        CancellationToken.None
+                                    );
+                                }
+                            }
+                            setArtist(artistIndex - 1);
+                        }
+                    }
+                    else if (root.TryGetProperty("type", out type) && type.GetString() == "skipTurn")
+                    {
+                        var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Turn skipped!\"}";
+                        foreach (var client in clients.ToList())
+                        {
+                            if (client.State == WebSocketState.Open)
+                            {
+                                await client.SendAsync(
+                                    Encoding.UTF8.GetBytes(notifyMessage),
+                                    WebSocketMessageType.Text,
+                                    true,
+                                    CancellationToken.None
+                                );
+                            }
+                        }
+                        var clearCanvasMessage = "{\"type\": \"clearCanvas\"}";
+                        foreach (var client in clients.ToList())
+                        {
+                            if (client.State == WebSocketState.Open)
+                            {
+                                await client.SendAsync(
+                                    Encoding.UTF8.GetBytes(clearCanvasMessage),
+                                    WebSocketMessageType.Text,
+                                    true,
+                                    CancellationToken.None
+                                );
+                            }
+                        }
+                        setArtist(artistIndex++);
                     }
                     else if (root.TryGetProperty("type", out type) && type.GetString() == "canvasUpdate")
                     {
@@ -392,6 +501,59 @@ app.Use(async (context, next) =>
                             true,
                             CancellationToken.None
                         );
+                    }
+                }
+
+                if (player.isDrawing && game.Players.Count >= 3)
+                {
+                    --artistIndex;
+                    if (artistIndex < 0)
+                    {
+                        artistIndex = 0;
+                    }
+                    setArtist(artistIndex++);
+                }
+                else if (game.Players.Count < 3)
+                {
+                    gameStarted = false;
+                    var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Game is over!\"}";
+                    foreach (var client in clients.ToList())
+                    {
+                        if (client.State == WebSocketState.Open)
+                        {
+                            await client.SendAsync(
+                                Encoding.UTF8.GetBytes(notifyMessage),
+                                WebSocketMessageType.Text,
+                                true,
+                                CancellationToken.None
+                            );
+                        }
+                    }
+                    artistIndex = 0;
+                    foreach (var client in clients.ToList())
+                    {
+                        if (client.State == WebSocketState.Open)
+                        {
+                            await client.SendAsync(
+                                Encoding.UTF8.GetBytes(clearCanvasMessage),
+                                WebSocketMessageType.Text,
+                                true,
+                                CancellationToken.None
+                            );
+                        }
+                    }
+                    var currentDrawerMessage = "{\"type\": \"currentDrawer\", \"artist\": \"\"}";
+                    foreach (var client in clients.ToList())
+                    {
+                        if (client.State == WebSocketState.Open)
+                        {
+                            await client.SendAsync(
+                                Encoding.UTF8.GetBytes(currentDrawerMessage),
+                                WebSocketMessageType.Text,
+                                true,
+                                CancellationToken.None
+                            );
+                        }
                     }
                 }
             }

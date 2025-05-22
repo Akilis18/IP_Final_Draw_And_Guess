@@ -65,16 +65,39 @@ function BottomNotificationComp(
   { bottomNotificationMessage }: { bottomNotificationMessage?: string }
 ){
   return (
-    <div className="fixed bottom-0 z-14 w-3/4 left-60 right-50 p-4 bg-white dark:bg-zinc-900 rounded-t-lg shadow-lg border-t-2 border-indigo-500">
-      <div className="flex items-center justify-between">
-        {
-          bottomNotificationMessage && (
-            <div className="text-md text-zinc-700 dark:text-zinc-300">
-              {bottomNotificationMessage}
-            </div>
-          )
-        }
+    <div
+      className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-[90vw] max-w-xl px-6 py-4
+                 bg-gradient-to-r from-indigo-400/90 to-indigo-600/90 dark:from-zinc-800/90 dark:to-zinc-900/90
+                 rounded-2xl shadow-2xl border-t-4 border-indigo-500
+                 animate-slideup`}
+      style={{
+        transition: "opacity 0.3s, transform 0.3s",
+        opacity: bottomNotificationMessage ? 1 : 0,
+        pointerEvents: bottomNotificationMessage ? "auto" : "none"
+      }}
+    >
+      <div className="flex items-center justify-center">
+        {bottomNotificationMessage && (
+          <span className="text-lg font-semibold text-white drop-shadow-md tracking-wide animate-pulse">
+            {bottomNotificationMessage}
+          </span>
+        )}
       </div>
+      <style jsx global>{`
+        @keyframes slideup {
+          0% {
+            opacity: 0;
+            transform: translateY(40px) scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .animate-slideup {
+          animation: slideup 0.5s cubic-bezier(0.4,0,0.2,1);
+        }
+      `}</style>
     </div>
   )
 }
@@ -184,7 +207,6 @@ export default function RoomPage() {
     const data = JSON.parse(event.data);
     if (data.type === "playerList") {
       setPlayers(data.players);
-
     }
     if (data.type === "chat") {
       setChatMessages((prev) => [
@@ -234,6 +256,7 @@ export default function RoomPage() {
     }
     if (data.type === "artist") {
       setGuessed(false);
+      setGuessShowWord("")
       setCurrentDrawer(data.artist);
       setBottomNotification(true)
       setBottomNotificationMessage(`${data.artist} is drawing now!`)
@@ -257,6 +280,9 @@ export default function RoomPage() {
     if (data.type === "selectWord") {
       setCurrentWord(data.word);
       setShowHint(0);
+    }
+    if (data.type === "currentDrawer") {
+      setCurrentDrawer(data.artist);
     }
     if (data.error === "Name already exists") {
       //socket connect
@@ -732,6 +758,7 @@ export default function RoomPage() {
       }, 3000)
     }
     setShowHint(hintLevel)
+    console.log("Current guess word: ", guessShowWord)
   }
 
   // Player component
@@ -741,12 +768,17 @@ export default function RoomPage() {
     >
       <div className="flex items-center space-x-3">
         <div
-          className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium ${player.isDrawing ? "bg-indigo-500" : "bg-gray-500"}`}
+          className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium ${player.isDrawing ? "bg-indigo-500" : player.name === myname ? "bg-yellow-500" : "bg-gray-500"}`}
         >
           {player.name.charAt(0)}
         </div>
         <div className="flex flex-col">
-          <span className="font-medium text-zinc-800 dark:text-zinc-200">{player.name}</span>
+          <span className="font-medium text-zinc-800 dark:text-zinc-200">
+            {player.name}
+            {player.name === myname && (
+            <span className="ml-2 px-2 py-0.5 rounded bg-yellow-200 text-yellow-800 text-xs font-bold">(You)</span>
+            )}
+          </span>
           {player.isDrawing && (
             <Badge
               variant="outline"
@@ -863,7 +895,7 @@ export default function RoomPage() {
             <div>
               <div className="text-sm text-zinc-500 dark:text-zinc-400">Current word</div>
               <div className="text-xl font-bold tracking-wider">
-                {players.find((p) => p.name === myname)?.isDrawing
+                {myname == currentDrawer
                   ? currentWord
                   : guessShowWord}
               </div>
@@ -1323,6 +1355,14 @@ export default function RoomPage() {
               <Button
                 variant="outline"
                 className="bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300 hover:cursor-pointer dark:bg-amber-900/30 dark:hover:bg-amber-800/50 dark:text-amber-300 dark:border-amber-700"
+                onClick={() => {
+                  if (myname === currentDrawer) {
+                    socketRef.current?.send(JSON.stringify({
+                      type: "newWord",
+                      clientId: clientId.current,
+                    }))
+                  }
+                }}
               >
                 <ArrowRight className="w-4 h-4 mr-2" />
                 New Word
@@ -1330,6 +1370,14 @@ export default function RoomPage() {
               <Button
                 variant="outline"
                 className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-rose-300 hover:cursor-pointer dark:bg-rose-900/30 dark:hover:bg-rose-800/50 dark:text-rose-300 dark:border-rose-700"
+                onClick={() => {
+                  if (myname === currentDrawer) {
+                    socketRef.current?.send(JSON.stringify({
+                      type: "skipTurn",
+                      clientId: clientId.current,
+                    }))
+                  }
+                }}
               >
                 <SkipForward className="w-4 h-4 mr-2" />
                 Skip Turn
