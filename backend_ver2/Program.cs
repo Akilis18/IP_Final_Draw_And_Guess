@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using backend_ver2.Models;
 using backend_ver2.Questions;
+using System.Threading;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
@@ -25,6 +26,7 @@ bool wordChanged = false;
 bool gameStarted = false;
 string currentDrawer = "";
 int hintLevel = 0;
+CancellationTokenSource timerCts = new CancellationTokenSource();
 
 
 object getPlayerList() {
@@ -78,8 +80,8 @@ async void setArtist(int index)
     }
     if (index >= game.Players.Count)
     {
-        index = 0;
-        artistIndex = 1;
+        setInterval();
+        return;
     }
     if (index < 0) index = 0;
 
@@ -130,6 +132,146 @@ async void setArtist(int index)
             );
         }
     }
+
+}
+
+async void setTimer(int time)
+{
+    if (time <= 0) return;
+    timerCts?.Cancel();
+    timerCts = new CancellationTokenSource();
+    var token = timerCts.Token;
+
+    for (int i = time; i > 0; i--)
+    {
+        if (token.IsCancellationRequested) return;
+        Console.WriteLine($"Time left: {i} seconds");
+        var setTimeMessage = $"{{\"type\": \"setTime\", \"time\": {i}}}";
+        foreach (var client in clients.ToList())
+        {
+            if (client.State == WebSocketState.Open)
+            {
+                await client.SendAsync(
+                    Encoding.UTF8.GetBytes(setTimeMessage),
+                    WebSocketMessageType.Text,
+                    true,
+                    CancellationToken.None
+                );
+            }
+        }
+        await Task.Delay(1000).ContinueWith(_ => { });
+    }
+
+    if (token.IsCancellationRequested) return;
+    // Time is up
+
+    var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Time is up! Changing Drawer...\"}";
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            await client.SendAsync(
+                Encoding.UTF8.GetBytes(notifyMessage),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
+    await Task.Delay(3000); // wait for 3 seconds before next round
+
+    setArtist(artistIndex++);
+    wordChanged = false;
+}
+
+async void setInterval()
+{
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            var notifyMessage = "{\"type\": \"bottomNotices\", \"message\": \"Round ended! new round begins shortly\"}";
+            client.SendAsync(
+                Encoding.UTF8.GetBytes(notifyMessage),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
+    List<Player> sortByScore = game.Players.OrderByDescending(p => p.Score).ToList();
+    var showLeaderboardMessage = new StringBuilder();
+    showLeaderboardMessage.Append("{\"type\": \"showLeaderboard\", \"players\": [");
+    for(int i = 0; i < 3; i++)
+    {
+        if (i >= sortByScore.Count) break;
+        var p = sortByScore[i];
+        showLeaderboardMessage.Append($"{{\"name\": \"{p.Name}\", \"rank\": {i + 1}, \"score\": {p.Score}}},");
+    }
+
+    showLeaderboardMessage.Remove(showLeaderboardMessage.Length - 1, 1); // remove last comma
+    showLeaderboardMessage.Append("]}");
+
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            await client.SendAsync(
+                Encoding.UTF8.GetBytes(showLeaderboardMessage.ToString()),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
+    var setTimeMessage = "{\"type\": \"setTime\", \"time\": 10}";
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            await client.SendAsync(
+                Encoding.UTF8.GetBytes(setTimeMessage),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+    await Task.Delay(10000); // wait for 10 seconds before next round
+
+    var hideLeaderboardMessage = "{\"type\": \"hideLeaderboard\"}";
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            await client.SendAsync(
+                Encoding.UTF8.GetBytes(hideLeaderboardMessage),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
+    artistIndex = 0;
+    foreach (var client in clients.ToList())
+    {
+        if (client.State == WebSocketState.Open)
+        {
+            var clearCanvasMessage = "{\"type\": \"clearCanvas\"}";
+            await client.SendAsync(
+                Encoding.UTF8.GetBytes(clearCanvasMessage),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+        }
+    }
+
+    setArtist(artistIndex++);
 }
 
 app.Use(async (context, next) =>
@@ -305,6 +447,9 @@ app.Use(async (context, next) =>
 
                                 if (game.guessList.Count == game.Players.Count - 1)
                                 {
+                                    timerCts.Cancel();
+                                    wordChanged = false;
+
                                     var clearCanvasMessage = "{\"type\": \"clearCanvas\"}";
                                     foreach (var client in clients.ToList())
                                     {
@@ -312,6 +457,20 @@ app.Use(async (context, next) =>
                                         {
                                             await client.SendAsync(
                                                 Encoding.UTF8.GetBytes(clearCanvasMessage),
+                                                WebSocketMessageType.Text,
+                                                true,
+                                                CancellationToken.None
+                                            );
+                                        }
+                                    }
+
+                                    var setTimeMessage = "{\"type\": \"setTime\", \"time\": 0}";
+                                    foreach (var client in clients.ToList())
+                                    {
+                                        if (client.State == WebSocketState.Open)
+                                        {
+                                            await client.SendAsync(
+                                                Encoding.UTF8.GetBytes(setTimeMessage),
                                                 WebSocketMessageType.Text,
                                                 true,
                                                 CancellationToken.None
@@ -378,6 +537,7 @@ app.Use(async (context, next) =>
                         string selectedWord = root.GetProperty("word").GetString();
                         game.Question = selectedWord;
                         Console.WriteLine("Selected word: " + selectedWord);
+                        setTimer(60);
                     }
                     else if (root.TryGetProperty("type", out type) && type.GetString() == "setTime")
                     {

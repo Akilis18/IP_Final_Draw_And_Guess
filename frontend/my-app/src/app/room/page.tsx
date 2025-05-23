@@ -125,6 +125,58 @@ function QuestionSelection (
   )
 }
 
+function ScoreLeaderBoard (
+  {
+    firstPlace,
+    secondPlace,
+    thirdPlace,
+    timeLeft = 10,
+    maxTime = 10
+  } : {
+    firstPlace: { name: string; score: number }
+    secondPlace: { name: string; score: number }
+    thirdPlace: { name: string; score: number }
+    timeLeft?: number
+    maxTime?: number
+  }
+){
+  // 獎牌 emoji
+  const medals = ["🥇", "🥈", "🥉"];
+  const places = [
+    { ...firstPlace, medal: medals[0], bg: "bg-yellow-100 dark:bg-yellow-900/60", text: "text-yellow-700 dark:text-yellow-200", border: "border-yellow-400" },
+    { ...secondPlace, medal: medals[1], bg: "bg-gray-100 dark:bg-gray-800/60", text: "text-gray-700 dark:text-gray-200", border: "border-gray-400" },
+    { ...thirdPlace, medal: medals[2], bg: "bg-amber-100 dark:bg-amber-900/60", text: "text-amber-700 dark:text-amber-200", border: "border-amber-400" },
+  ];
+  const percent = (timeLeft / maxTime) * 100;
+
+  return (
+    <div className="fixed z-50 top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+      <div className="bg-white dark:bg-zinc-800 rounded-2xl p-8 shadow-2xl min-w-[320px] max-w-xs border-4 border-indigo-400">
+        <h2 className="text-2xl font-extrabold mb-6 text-center text-indigo-700 dark:text-indigo-300 tracking-wide">Leaderboard</h2>
+        <div className="flex flex-col space-y-4">
+          {places.map((p, idx) => (
+            <div
+              key={idx}
+              className={`flex items-center justify-between rounded-xl px-5 py-4 shadow-md border-2 ${p.bg} ${p.border}`}
+            >
+              <span className={`text-2xl font-bold mr-3 ${p.text}`}>{p.medal}</span>
+              <span className={`flex-1 text-lg font-semibold truncate ${p.text}`}>{p.name || "-"}</span>
+              <span className={`text-xl font-extrabold ml-3 ${p.text}`}>{p.score ?? 0}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div
+        className="timerBar absolute top-0 left-0 h-1 bg-gradient-to-r from-indigo-400/90 to-indigo-600/90 dark:from-zinc-800/90 dark:to-zinc-900/90"
+        style={{
+          width: `${percent}%`,
+          transition: "width 1s linear"
+        }}
+      />
+    </div>   
+  )
+}
+
 
 
 
@@ -139,19 +191,20 @@ export default function RoomPage() {
     { playerName: "Player 3", message: "I'm ready to play!", isCurrentUser: false },*/
   ])
   const [currentWord, setCurrentWord] = useState("")
-  const [timeLeft, setTimeLeft] = useState(60)
+  const [timeLeft, setTimeLeft] = useState(0)
   const [currentDrawer, setCurrentDrawer] = useState("")
   const [myname, setmyname] = useState("")
   const [showNamePopup, setShowNamePopup] = useState(true)
   const [bottomNotification, setBottomNotification] = useState(false)
   const [showQuestionSelection, setShowQuestionSelection] = useState(false)
+  const [showLeaderBoard, setShowLeaderBoard] = useState(false)
 
   const [question1, setQuestion1] = useState("")
   const [question2, setQuestion2] = useState("")
   const [bottomNotificationMessage, setBottomNotificationMessage] = useState("")
-  const [players, setPlayers] = useState<{name: string, score: number, isDrawing: boolean}[]>([ 
-    // { name: myname, score: 120, isDrawing: false }
-  ])
+  const [players, setPlayers] = useState<{name: string, score: number, isDrawing: boolean}[]>([])
+  const [LeaderBoardPlayer, setLeaderBoardPlayer] = useState<{name: string, rank: number, score: number}[]>([])
+
   const [isDrawing, setDrawing] = useState(false)
   const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null)
   const [lastDrawPos, setLastDrawPos] = useState<{x: number, y: number} | null>(null)
@@ -252,7 +305,7 @@ export default function RoomPage() {
       setBottomNotificationMessage(data.message)
       setTimeout(() => {
         setBottomNotification(false)
-      }, 3000)
+      }, 6000)
     }
     if (data.type === "artist") {
       setGuessed(false);
@@ -262,7 +315,7 @@ export default function RoomPage() {
       setBottomNotificationMessage(`${data.artist} is drawing now!`)
       setTimeout(() => {
         setBottomNotification(false)
-      }, 3000)
+      }, 6000)
     }
     if (data.type === "question") {
       setQuestion1(data.question1);
@@ -283,6 +336,16 @@ export default function RoomPage() {
     }
     if (data.type === "currentDrawer") {
       setCurrentDrawer(data.artist);
+    }
+    if (data.type === "setTime") {
+      setTimeLeft(data.time);
+    }
+    if (data.type === "showLeaderboard") {
+      setLeaderBoardPlayer(data.players);
+      setShowLeaderBoard(true);
+    }
+    if (data.type === "hideLeaderboard") {
+      setShowLeaderBoard(false);
     }
     if (data.error === "Name already exists") {
       //socket connect
@@ -735,6 +798,12 @@ export default function RoomPage() {
     if (hintLevel <= 0) {
       const word = setword.split("").map((char) => "_").join(" ")
       setGuessShowWord(word)
+
+      setBottomNotification(true)
+      setBottomNotificationMessage(`Hint: shown, ${3 - hintLevel} more hints available.`)
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
     }
     else if (hintLevel < 4) {
       let currentguess = ""
@@ -749,6 +818,12 @@ export default function RoomPage() {
         }
       }
       setGuessShowWord(currentguess)
+
+      setBottomNotification(true)
+      setBottomNotificationMessage(`Hint: shown, ${3 - hintLevel} more hints available.`)
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
     }
     else {
       setBottomNotification(true)
@@ -864,6 +939,20 @@ export default function RoomPage() {
           />
         )
       }
+      {
+        showLeaderBoard && (
+          <ScoreLeaderBoard
+            firstPlace={LeaderBoardPlayer[0]}
+            secondPlace={LeaderBoardPlayer[1]}
+            thirdPlace={LeaderBoardPlayer[2]}
+            timeLeft={timeLeft}
+            maxTime={10}
+          />
+        )
+      }
+      {/* Chat section */}
+
+
       {/* Footer */}
 
       {/* Chat section */}
@@ -882,7 +971,7 @@ export default function RoomPage() {
             </div>
             <div>
               <div className="text-sm text-zinc-500 dark:text-zinc-400">Time left</div>
-              <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{timeLeft}s</div>
+              <div className={`text-xl font-bold text-indigo-600 dark:text-indigo-400 ${timeLeft > 0 ? "" : "hidden"}`}>{timeLeft}s</div>
             </div>
           </div>
 
@@ -927,7 +1016,7 @@ export default function RoomPage() {
 
             <Separator className="my-4" />
 
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">Waiting for more players... (3 players to start)</div>
+            <div className={`text-center text-sm text-zinc-500 dark:text-zinc-400 ${players.length >= 3 ? "hidden" : ""}`}>Waiting for more players... (3 players to start)</div>
           </div>
         </div>
 
