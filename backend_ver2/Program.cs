@@ -5,6 +5,12 @@ using backend_ver2.Questions;
 using System.Threading;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Listen(System.Net.IPAddress.Any, 5000);
+});
+
 var app = builder.Build();
 
 app.UseWebSockets();

@@ -249,7 +249,7 @@ export default function RoomPage() {
   // websocket connection
 
   useEffect(() => {
-  const socket = new WebSocket("ws://localhost:5000");
+  const socket = new WebSocket("ws://54.86.44.151:5000");
   socketRef.current = socket;
   
 
