@@ -13,10 +13,6 @@ export default function HomePage() {
     window.location.href = "/room"
   }
 
-  const lobbySearch = () => {
-    window.location.href = "/lobby"
-  }
-
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden">
       {/* Dynamic Background */}
@@ -38,9 +34,6 @@ export default function HomePage() {
             <Button size="lg" className="bg-blue-500 hover:bg-blue-600 text-lg hover:cursor-pointer" onClick={findRoom}>
               開始
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button size="lg" variant="outline" className="border-2 text-lg hover:cursor-pointer" onClick={lobbySearch}>
-              尋找大廳
             </Button>
           </div>
 
