@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Fascinate } from "next/font/google"
+import { v4 as uuidv4 } from 'uuid';
 
 function PopUpSetName({
   name,
@@ -182,7 +183,7 @@ function ScoreLeaderBoard (
 
 export default function RoomPage() {
   // State management
-  const clientId = useRef(crypto.randomUUID())
+  const clientId = useRef(uuidv4());
   const [brushWeight, setBrushWeight] = useState(4)
   const [brushColor, setBrushColor] = useState("#4F46E5")
   const [chatMessages, setChatMessages] = useState<{ playerName: string; message: string; isCurrentUser: boolean }[]>([
