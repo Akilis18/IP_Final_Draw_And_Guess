@@ -65,16 +65,39 @@ function BottomNotificationComp(
   { bottomNotificationMessage }: { bottomNotificationMessage?: string }
 ){
   return (
-    <div className="fixed bottom-0 z-14 w-3/4 left-60 right-50 p-4 bg-white dark:bg-zinc-900 rounded-t-lg shadow-lg border-t-2 border-indigo-500">
-      <div className="flex items-center justify-between">
-        {
-          bottomNotificationMessage && (
-            <div className="text-md text-zinc-700 dark:text-zinc-300">
-              {bottomNotificationMessage}
-            </div>
-          )
-        }
+    <div
+      className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-[90vw] max-w-xl px-6 py-4
+                 bg-gradient-to-r from-indigo-400/90 to-indigo-600/90 dark:from-zinc-800/90 dark:to-zinc-900/90
+                 rounded-2xl shadow-2xl border-t-4 border-indigo-500
+                 animate-slideup`}
+      style={{
+        transition: "opacity 0.3s, transform 0.3s",
+        opacity: bottomNotificationMessage ? 1 : 0,
+        pointerEvents: bottomNotificationMessage ? "auto" : "none"
+      }}
+    >
+      <div className="flex items-center justify-center">
+        {bottomNotificationMessage && (
+          <span className="text-lg font-semibold text-white drop-shadow-md tracking-wide animate-pulse">
+            {bottomNotificationMessage}
+          </span>
+        )}
       </div>
+      <style jsx global>{`
+        @keyframes slideup {
+          0% {
+            opacity: 0;
+            transform: translateY(40px) scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .animate-slideup {
+          animation: slideup 0.5s cubic-bezier(0.4,0,0.2,1);
+        }
+      `}</style>
     </div>
   )
 }
@@ -102,6 +125,58 @@ function QuestionSelection (
   )
 }
 
+function ScoreLeaderBoard (
+  {
+    firstPlace,
+    secondPlace,
+    thirdPlace,
+    timeLeft = 10,
+    maxTime = 10
+  } : {
+    firstPlace: { name: string; score: number }
+    secondPlace: { name: string; score: number }
+    thirdPlace: { name: string; score: number }
+    timeLeft?: number
+    maxTime?: number
+  }
+){
+  // 獎牌 emoji
+  const medals = ["🥇", "🥈", "🥉"];
+  const places = [
+    { ...firstPlace, medal: medals[0], bg: "bg-yellow-100 dark:bg-yellow-900/60", text: "text-yellow-700 dark:text-yellow-200", border: "border-yellow-400" },
+    { ...secondPlace, medal: medals[1], bg: "bg-gray-100 dark:bg-gray-800/60", text: "text-gray-700 dark:text-gray-200", border: "border-gray-400" },
+    { ...thirdPlace, medal: medals[2], bg: "bg-amber-100 dark:bg-amber-900/60", text: "text-amber-700 dark:text-amber-200", border: "border-amber-400" },
+  ];
+  const percent = (timeLeft / maxTime) * 100;
+
+  return (
+    <div className="fixed z-50 top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+      <div className="bg-white dark:bg-zinc-800 rounded-2xl p-8 shadow-2xl min-w-[320px] max-w-xs border-4 border-indigo-400">
+        <h2 className="text-2xl font-extrabold mb-6 text-center text-indigo-700 dark:text-indigo-300 tracking-wide">Leaderboard</h2>
+        <div className="flex flex-col space-y-4">
+          {places.map((p, idx) => (
+            <div
+              key={idx}
+              className={`flex items-center justify-between rounded-xl px-5 py-4 shadow-md border-2 ${p.bg} ${p.border}`}
+            >
+              <span className={`text-2xl font-bold mr-3 ${p.text}`}>{p.medal}</span>
+              <span className={`flex-1 text-lg font-semibold truncate ${p.text}`}>{p.name || "-"}</span>
+              <span className={`text-xl font-extrabold ml-3 ${p.text}`}>{p.score ?? 0}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div
+        className="timerBar absolute top-0 left-0 h-1 bg-gradient-to-r from-indigo-400/90 to-indigo-600/90 dark:from-zinc-800/90 dark:to-zinc-900/90"
+        style={{
+          width: `${percent}%`,
+          transition: "width 1s linear"
+        }}
+      />
+    </div>   
+  )
+}
+
 
 
 
@@ -116,19 +191,20 @@ export default function RoomPage() {
     { playerName: "Player 3", message: "I'm ready to play!", isCurrentUser: false },*/
   ])
   const [currentWord, setCurrentWord] = useState("")
-  const [timeLeft, setTimeLeft] = useState(60)
+  const [timeLeft, setTimeLeft] = useState(0)
   const [currentDrawer, setCurrentDrawer] = useState("")
   const [myname, setmyname] = useState("")
   const [showNamePopup, setShowNamePopup] = useState(true)
   const [bottomNotification, setBottomNotification] = useState(false)
   const [showQuestionSelection, setShowQuestionSelection] = useState(false)
+  const [showLeaderBoard, setShowLeaderBoard] = useState(false)
 
   const [question1, setQuestion1] = useState("")
   const [question2, setQuestion2] = useState("")
   const [bottomNotificationMessage, setBottomNotificationMessage] = useState("")
-  const [players, setPlayers] = useState<{name: string, score: number, isDrawing: boolean}[]>([ 
-    // { name: myname, score: 120, isDrawing: false }
-  ])
+  const [players, setPlayers] = useState<{name: string, score: number, isDrawing: boolean}[]>([])
+  const [LeaderBoardPlayer, setLeaderBoardPlayer] = useState<{name: string, rank: number, score: number}[]>([])
+
   const [isDrawing, setDrawing] = useState(false)
   const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null)
   const [lastDrawPos, setLastDrawPos] = useState<{x: number, y: number} | null>(null)
@@ -184,7 +260,6 @@ export default function RoomPage() {
     const data = JSON.parse(event.data);
     if (data.type === "playerList") {
       setPlayers(data.players);
-
     }
     if (data.type === "chat") {
       setChatMessages((prev) => [
@@ -230,16 +305,17 @@ export default function RoomPage() {
       setBottomNotificationMessage(data.message)
       setTimeout(() => {
         setBottomNotification(false)
-      }, 3000)
+      }, 6000)
     }
     if (data.type === "artist") {
       setGuessed(false);
+      setGuessShowWord("")
       setCurrentDrawer(data.artist);
       setBottomNotification(true)
       setBottomNotificationMessage(`${data.artist} is drawing now!`)
       setTimeout(() => {
         setBottomNotification(false)
-      }, 3000)
+      }, 6000)
     }
     if (data.type === "question") {
       setQuestion1(data.question1);
@@ -257,6 +333,19 @@ export default function RoomPage() {
     if (data.type === "selectWord") {
       setCurrentWord(data.word);
       setShowHint(0);
+    }
+    if (data.type === "currentDrawer") {
+      setCurrentDrawer(data.artist);
+    }
+    if (data.type === "setTime") {
+      setTimeLeft(data.time);
+    }
+    if (data.type === "showLeaderboard") {
+      setLeaderBoardPlayer(data.players);
+      setShowLeaderBoard(true);
+    }
+    if (data.type === "hideLeaderboard") {
+      setShowLeaderBoard(false);
     }
     if (data.error === "Name already exists") {
       //socket connect
@@ -709,6 +798,12 @@ export default function RoomPage() {
     if (hintLevel <= 0) {
       const word = setword.split("").map((char) => "_").join(" ")
       setGuessShowWord(word)
+
+      setBottomNotification(true)
+      setBottomNotificationMessage(`Hint: shown, ${3 - hintLevel} more hints available.`)
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
     }
     else if (hintLevel < 4) {
       let currentguess = ""
@@ -723,6 +818,12 @@ export default function RoomPage() {
         }
       }
       setGuessShowWord(currentguess)
+
+      setBottomNotification(true)
+      setBottomNotificationMessage(`Hint: shown, ${3 - hintLevel} more hints available.`)
+      setTimeout(() => {
+        setBottomNotification(false)
+      }, 3000)
     }
     else {
       setBottomNotification(true)
@@ -732,6 +833,7 @@ export default function RoomPage() {
       }, 3000)
     }
     setShowHint(hintLevel)
+    console.log("Current guess word: ", guessShowWord)
   }
 
   // Player component
@@ -741,12 +843,17 @@ export default function RoomPage() {
     >
       <div className="flex items-center space-x-3">
         <div
-          className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium ${player.isDrawing ? "bg-indigo-500" : "bg-gray-500"}`}
+          className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-medium ${player.isDrawing ? "bg-indigo-500" : player.name === myname ? "bg-yellow-500" : "bg-gray-500"}`}
         >
           {player.name.charAt(0)}
         </div>
         <div className="flex flex-col">
-          <span className="font-medium text-zinc-800 dark:text-zinc-200">{player.name}</span>
+          <span className="font-medium text-zinc-800 dark:text-zinc-200">
+            {player.name}
+            {player.name === myname && (
+            <span className="ml-2 px-2 py-0.5 rounded bg-yellow-200 text-yellow-800 text-xs font-bold">(You)</span>
+            )}
+          </span>
           {player.isDrawing && (
             <Badge
               variant="outline"
@@ -832,6 +939,20 @@ export default function RoomPage() {
           />
         )
       }
+      {
+        showLeaderBoard && (
+          <ScoreLeaderBoard
+            firstPlace={LeaderBoardPlayer[0]}
+            secondPlace={LeaderBoardPlayer[1]}
+            thirdPlace={LeaderBoardPlayer[2]}
+            timeLeft={timeLeft}
+            maxTime={10}
+          />
+        )
+      }
+      {/* Chat section */}
+
+
       {/* Footer */}
 
       {/* Chat section */}
@@ -850,7 +971,7 @@ export default function RoomPage() {
             </div>
             <div>
               <div className="text-sm text-zinc-500 dark:text-zinc-400">Time left</div>
-              <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{timeLeft}s</div>
+              <div className={`text-xl font-bold text-indigo-600 dark:text-indigo-400 ${timeLeft > 0 ? "" : "hidden"}`}>{timeLeft}s</div>
             </div>
           </div>
 
@@ -863,7 +984,7 @@ export default function RoomPage() {
             <div>
               <div className="text-sm text-zinc-500 dark:text-zinc-400">Current word</div>
               <div className="text-xl font-bold tracking-wider">
-                {players.find((p) => p.name === myname)?.isDrawing
+                {myname == currentDrawer
                   ? currentWord
                   : guessShowWord}
               </div>
@@ -895,7 +1016,7 @@ export default function RoomPage() {
 
             <Separator className="my-4" />
 
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">Waiting for more players... (3 players to start)</div>
+            <div className={`text-center text-sm text-zinc-500 dark:text-zinc-400 ${players.length >= 3 ? "hidden" : ""}`}>Waiting for more players... (3 players to start)</div>
           </div>
         </div>
 
@@ -1323,6 +1444,14 @@ export default function RoomPage() {
               <Button
                 variant="outline"
                 className="bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300 hover:cursor-pointer dark:bg-amber-900/30 dark:hover:bg-amber-800/50 dark:text-amber-300 dark:border-amber-700"
+                onClick={() => {
+                  if (myname === currentDrawer) {
+                    socketRef.current?.send(JSON.stringify({
+                      type: "newWord",
+                      clientId: clientId.current,
+                    }))
+                  }
+                }}
               >
                 <ArrowRight className="w-4 h-4 mr-2" />
                 New Word
@@ -1330,6 +1459,14 @@ export default function RoomPage() {
               <Button
                 variant="outline"
                 className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-rose-300 hover:cursor-pointer dark:bg-rose-900/30 dark:hover:bg-rose-800/50 dark:text-rose-300 dark:border-rose-700"
+                onClick={() => {
+                  if (myname === currentDrawer) {
+                    socketRef.current?.send(JSON.stringify({
+                      type: "skipTurn",
+                      clientId: clientId.current,
+                    }))
+                  }
+                }}
               >
                 <SkipForward className="w-4 h-4 mr-2" />
                 Skip Turn
