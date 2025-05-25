@@ -16,7 +16,7 @@ import {
   SkipForward,
 } from "lucide-react"
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, use } from "react"
 import { headerLayout as HeaderLayout } from "@/app/layout"
 import { backgroundLayout as BackgroundLayout } from "@/app/layout"
 import { footerLayout as FooterLayout } from "@/app/layout"
@@ -249,7 +249,7 @@ export default function RoomPage() {
   // websocket connection
 
   useEffect(() => {
-  const socket = new WebSocket("ws://54.86.44.151:5000");
+  const socket = new WebSocket("ws://localhost:5000");
   socketRef.current = socket;
   
 
@@ -287,6 +287,7 @@ export default function RoomPage() {
     }
     // 未來可擴充處理：畫圖、換人、倒數等
     if (data.type === "canvasUpdate") {
+      if (data.userId === clientId.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
 
@@ -377,7 +378,7 @@ export default function RoomPage() {
 
     // 監聽 isDrawing 狀態
     if (!isDrawing) {
-      // 停止畫圖後，延遲0.1秒再上傳
+      // 停止畫圖後，延遲0.01秒再上傳
       timeout = setTimeout(() => {
         const canvas = canvasRef.current;
         if (
@@ -397,11 +398,12 @@ export default function RoomPage() {
           socketRef.current.send(
             JSON.stringify({
               type: "canvasUpdate",
+              userId: clientId.current,
               image: base64Image,
             })
           );
         }
-      }, 100);
+      }, 10);
     }
 
     return () => {
@@ -713,6 +715,7 @@ export default function RoomPage() {
   }
 
   const clearCanvas = () => {
+    console.log("Clear canvas")
     const amIDrawing = players.find((player) => player.name === myname)?.isDrawing
     if (!amIDrawing) return //if not the current player
     const canvas = canvasRef.current
@@ -777,18 +780,11 @@ export default function RoomPage() {
       canvas &&
       socketRef.current?.readyState === WebSocket.OPEN
     ) {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const pixelBuffer = new Uint32Array(
-        ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
-      );
-      const isBlank = !pixelBuffer.some((color) => color !== 0);
-      if (isBlank) return;
-
       const base64Image = canvas.toDataURL("image/png");
       socketRef.current.send(
         JSON.stringify({
           type: "canvasUpdate",
+          userId: clientId.current,
           image: base64Image,
         })
       );
